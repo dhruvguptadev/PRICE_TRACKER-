@@ -253,10 +253,9 @@ product_id,product_name,selected_option,timestamp,price,stock,outcome
 
 ### 2. Render
 
-- New Web Service → root directory `backend/`.
-- Build command: `npm install && npx playwright install --with-deps chromium`
-- Start command: `npm start`
-- Set the backend environment variables.
+- New Web Service → connect the GitHub repo → **Root Directory** `backend`, **Language/Runtime** `Docker` (uses `backend/Dockerfile`).
+- The image installs Chromium and its system libraries as root. Render's native Node runtime can't install them, so don't use it for this service.
+- Set the backend environment variables (Render supplies `PORT` itself).
 - Verify `GET /api/health`.
 
 Render free instances have 512 MB RAM, so the scraper runs one browser and one target at a time and always closes the browser.
