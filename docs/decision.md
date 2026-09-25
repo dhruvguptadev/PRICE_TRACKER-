@@ -47,6 +47,10 @@ Implementation-time corrections (found by driving the real page):
 | Fetch the manifest once per run | The page loads its own manifest; classes can rotate between our fetch and the page's | Use the manifest the page itself loaded; ours is the fallback |
 | Same-slot duplicate cron trigger while the batch is still running → `409` (first implementation) | api.md says a duplicate slot is `200 duplicate` | Check the slot's `run_key` before the "batch running" guard |
 | 8 catalog passes are enough | Real sync reached 960/960 exactly on pass 8 | Pass limit raised to 15 |
+| Catalog sync can page as fast as possible | ~100 back-to-back listing requests got `429` from the store, which then failed the next tracking request | 250 ms pause between listing requests |
+| Prisma handles timestamps transparently | With a non-UTC database session, `@prisma/adapter-pg` shifted `timestamptz` reads/writes by the session offset (+05:30 locally) | Pin every connection to `TimeZone=UTC` via the pool's startup options |
+| The page's manifest is available once the heading renders | Sometimes still in flight, so the scraper had no class map | Explicitly await the page's manifest response |
+| "Panel ready but price selector missing" means the page shifted | Live run: the manifest-classed element *was* present but never settled; logged as `STRUCTURE_CHANGED` | Report it as `PRICE_NOT_READY` with opacity/text diagnostics; keep `STRUCTURE_CHANGED` for a truly missing element |
 
 ---
 
@@ -173,6 +177,19 @@ Implementation-time corrections (found by driving the real page):
 **Decision:** The backend uses `pg` with the Supabase session pooler string. RLS is enabled with no public policies.
 
 **Why:** Render can't reach Supabase's IPv6-only direct host. `pg` gives real transactions. RLS closes the auto-generated public REST API.
+
+## Decision 019 — Prisma on top of the SQL schema
+
+**Decision:** Use Prisma 7 (`prisma-client` generator + `@prisma/adapter-pg`) for data access, with `backend/db/schema.sql` as the schema source and `prisma db pull` to generate models. Pinned to 7.10.0.
+
+**Why:** Typed queries and less hand-written SQL. Introspection keeps the partial unique index; the CHECK constraints (price only on success) can't be expressed in `schema.prisma` but remain enforced by the database.
+
+**Trade-offs / exceptions:**
+
+- The session-level advisory lock uses a raw `pg` client from the same pool; Prisma can't pin one connection for minutes.
+- Catalog upsert (960 rows) and ranked search use `$executeRaw` / `$queryRaw`; Prisma has no bulk upsert or ranked ordering.
+- `npm`'s `latest` tag for `prisma` pointed at an 8.0 release candidate, so versions are pinned exactly.
+- The generated client is TypeScript, so Node ≥ 22.18 is required.
 
 ## Resolved by Target-Site Inspection (2026-09-25)
 

@@ -14,7 +14,7 @@ The application allows a user to search for a product, select a specific option/
 | Frontend hosting | Vercel |
 | Backend | Node.js + Express (ES Modules) |
 | Backend hosting | Render (free web service) |
-| Database | Supabase PostgreSQL (accessed server-side via `pg` through the Supabase pooler) |
+| Database | Supabase PostgreSQL via Prisma 7 (`@prisma/adapter-pg`) through the Supabase session pooler |
 | Catalog / options | Store JSON API over plain HTTP (no browser) |
 | Price / stock | Playwright (Chromium) — the store only reveals price after a browser-side challenge |
 | Scheduler | cron-job.org → protected backend endpoint, every 2 hours |
@@ -62,11 +62,11 @@ price-tracker/
 
 ## Local Requirements
 
-- Node.js 20+
 - npm
 - Git
 - Supabase project
 - Playwright Chromium (`npx playwright install chromium`)
+- Node.js 22.18+ (the generated Prisma client is TypeScript, which Node runs natively from 22.18)
 
 ## Environment Variables
 
@@ -110,6 +110,8 @@ Apply the database schema from `backend/db/schema.sql` (see [`docs/database.md`]
 ```bash
 cd backend && npm run db:schema
 ```
+
+`db:schema` runs `schema.sql`, then `prisma db pull` + `prisma generate` so `prisma/schema.prisma` and the client match the database. `schema.sql` stays the source of truth: it holds the CHECK constraints that Prisma's schema language cannot express. `npm install` regenerates the client (`postinstall`).
 
 The catalog syncs automatically on first start when `catalog_products` is empty. `npm run catalog:sync` forces a refresh from the CLI.
 

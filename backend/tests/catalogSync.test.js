@@ -19,7 +19,7 @@ function shuffledStore(count, perPage = 60, seed = 1) {
 }
 
 test('repeated passes collect every product despite shuffled pages', async () => {
-  const r = await collectCatalog({ fetchPage: shuffledStore(300), maxPasses: 20 });
+  const r = await collectCatalog({ fetchPage: shuffledStore(300), maxPasses: 20, pageDelayMs: 0 });
   assert.equal(r.products.length, 300);
   assert.equal(new Set(r.products.map((p) => p.id)).size, 300);
   assert.ok(r.complete);
@@ -27,7 +27,7 @@ test('repeated passes collect every product despite shuffled pages', async () =>
 });
 
 test('reports incompleteness instead of hiding it', async () => {
-  const r = await collectCatalog({ fetchPage: shuffledStore(300), maxPasses: 1 });
+  const r = await collectCatalog({ fetchPage: shuffledStore(300), maxPasses: 1, pageDelayMs: 0 });
   assert.equal(r.passes, 1);
   assert.equal(r.complete, false);
   assert.ok(r.products.length < 300);

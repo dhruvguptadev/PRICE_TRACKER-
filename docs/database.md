@@ -6,7 +6,7 @@ PostgreSQL on Supabase is required by the assignment.
 
 The schema is relational because a tracking target has a stable identity, while scrape runs and observations form a one-to-many history.
 
-Access model: **server-side only.** The Express backend connects with `pg` using the Supabase **session pooler** connection string (the direct connection is IPv6-only and Render cannot reach it). The browser never talks to Supabase directly. Multi-statement transactions (§10) need a real SQL connection, which `supabase-js` does not provide.
+Access model: **server-side only.** The Express backend uses **Prisma 7** (`@prisma/adapter-pg`) on a shared `pg.Pool`, using the Supabase **session pooler** connection string (the direct connection is IPv6-only and Render cannot reach it). The browser never talks to Supabase directly. Multi-statement transactions (§10) use Prisma interactive transactions. The batch advisory lock stays on a raw `pg` client, because it must hold one connection for the whole batch. Every connection is pinned to `TimeZone=UTC` (see decision.md: the Prisma pg adapter mis-reads `timestamptz` in non-UTC sessions). `schema.sql` is the source of truth; `prisma/schema.prisma` is introspected from it with `prisma db pull`.
 
 ## 2. Entity Relationship Diagram
 

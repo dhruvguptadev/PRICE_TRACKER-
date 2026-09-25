@@ -1,5 +1,6 @@
 import { config } from '../config.js';
-import { query, toIso } from '../db/pool.js';
+import { toIso } from '../db/pool.js';
+import { db } from '../db/prisma.js';
 import { getLastCronRun } from '../db/runs.js';
 import { catalogStatus } from './catalogService.js';
 
@@ -13,7 +14,7 @@ export async function getHealth() {
     timestamp: new Date().toISOString(),
   };
   try {
-    await query('select 1');
+    await db().$queryRaw`select 1`;
     const [catalog, lastCron] = await Promise.all([catalogStatus(), getLastCronRun()]);
     health.catalog = catalog;
     const lastAt = lastCron ? new Date(lastCron.started_at) : null;

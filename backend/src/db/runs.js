@@ -1,83 +1,100 @@
-import { query, withTransaction, getPool, toIso } from './pool.js';
+import { db, transaction, isUniqueViolation } from './prisma.js';
+import { getPool, toIso } from './pool.js';
 
 /**
  * Insert a run; for a duplicate run_key (same cron slot) nothing is inserted and the
  * existing run is returned with duplicate = true.
  */
 export async function claimRun({ runKey, triggerSource, targetCount = 0 }) {
-  const inserted = await query(
-    `insert into scrape_runs (run_key, trigger_source, target_count)
-     values ($1, $2, $3)
-     on conflict (run_key) do nothing
-     returning *`,
-    [runKey, triggerSource, targetCount],
-  );
-  if (inserted.rows[0]) return { run: inserted.rows[0], duplicate: false };
-  const existing = await query('select * from scrape_runs where run_key = $1', [runKey]);
-  return { run: existing.rows[0], duplicate: true };
+  try {
+    const run = await db().scrape_runs.create({
+      data: { run_key: runKey, trigger_source: triggerSource, target_count: targetCount },
+    });
+    return { run, duplicate: false };
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return { run: await findRunByKey(runKey), duplicate: true };
+  }
 }
 
-export async function findRunByKey(runKey) {
-  const { rows } = await query('select * from scrape_runs where run_key = $1', [runKey]);
-  return rows[0] ?? null;
+export function findRunByKey(runKey) {
+  return db().scrape_runs.findUnique({ where: { run_key: runKey } });
 }
 
 export async function setRunTargetCount(runId, targetCount) {
-  await query('update scrape_runs set target_count = $2 where id = $1', [runId, targetCount]);
+  await db().scrape_runs.update({ where: { id: runId }, data: { target_count: targetCount } });
 }
 
 /** Close runs left `running` by a crash/restart (docs/architecture.md §8.1). */
 export async function closeStuckRuns(olderThanMs, exceptRunId) {
-  const { rows } = await query(
-    `update scrape_runs set status = 'failed', finished_at = now()
-      where status = 'running'
-        and started_at < now() - ($1::int * interval '1 millisecond')
-        and id <> $2
-      returning run_key`,
-    [olderThanMs, exceptRunId],
-  );
+  const rows = await db().scrape_runs.updateManyAndReturn({
+    where: { status: 'running', started_at: { lt: new Date(Date.now() - olderThanMs) }, id: { not: exceptRunId } },
+    data: { status: 'failed', finished_at: new Date() },
+    select: { run_key: true },
+  });
   return rows.map((r) => r.run_key);
 }
 
 export async function finishRun(runId, { successCount, failureCount, status }) {
-  await query(
-    `update scrape_runs
-        set status = $2, success_count = $3, failure_count = $4, finished_at = now()
-      where id = $1`,
-    [runId, status, successCount, failureCount],
-  );
+  await db().scrape_runs.update({
+    where: { id: runId },
+    data: { status, success_count: successCount, failure_count: failureCount, finished_at: new Date() },
+  });
 }
 
 export async function failRun(runId) {
-  await query(`update scrape_runs set status = 'failed', finished_at = now() where id = $1 and status = 'running'`, [runId]);
+  await db().scrape_runs.updateMany({
+    where: { id: runId, status: 'running' },
+    data: { status: 'failed', finished_at: new Date() },
+  });
 }
 
 /** Success: attempt + observation + current state in one transaction (docs/database.md §10). */
-export async function recordSuccess({ runId, trackedProductId, attemptNumber, startedAt, finishedAt, result }) {
-  return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `insert into scrape_attempts
-         (run_id, tracked_product_id, attempt_number, started_at, finished_at, duration_ms, outcome, method,
-          manifest_revision, raw_price_text, raw_stock_text, extracted_price, extracted_stock_qty)
-       values ($1, $2, $3, $4, $5, $6, 'success', 'browser', $7, $8, $9, $10, $11)
-       returning id`,
-      [runId, trackedProductId, attemptNumber, startedAt, finishedAt, finishedAt - startedAt,
-        result.manifestRevision, result.rawPriceText, result.rawStockText, result.price, result.stockQty],
-    );
-    await client.query(
-      `insert into price_observations (tracked_product_id, scrape_attempt_id, price, mrp, currency, stock_qty, captured_at)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [trackedProductId, rows[0].id, result.price, result.mrp, result.currency, result.stockQty, finishedAt],
-    );
-    await client.query(
-      `update tracked_products
-          set current_price = $2, current_mrp = $3, currency = $4, current_stock_qty = $5,
-              last_success_at = $6, last_attempt_at = $6, last_outcome = 'success',
-              consecutive_failures = 0, updated_at = now()
-        where id = $1`,
-      [trackedProductId, result.price, result.mrp, result.currency, result.stockQty, finishedAt],
-    );
-    return rows[0].id;
+export function recordSuccess({ runId, trackedProductId, attemptNumber, startedAt, finishedAt, result }) {
+  return transaction(async (tx) => {
+    const attempt = await tx.scrape_attempts.create({
+      data: {
+        run_id: runId,
+        tracked_product_id: trackedProductId,
+        attempt_number: attemptNumber,
+        started_at: startedAt,
+        finished_at: finishedAt,
+        duration_ms: finishedAt - startedAt,
+        outcome: 'success',
+        method: 'browser',
+        manifest_revision: result.manifestRevision,
+        raw_price_text: result.rawPriceText,
+        raw_stock_text: result.rawStockText,
+        extracted_price: result.price,
+        extracted_stock_qty: result.stockQty,
+      },
+    });
+    await tx.price_observations.create({
+      data: {
+        tracked_product_id: trackedProductId,
+        scrape_attempt_id: attempt.id,
+        price: result.price,
+        mrp: result.mrp,
+        currency: result.currency,
+        stock_qty: result.stockQty,
+        captured_at: finishedAt,
+      },
+    });
+    await tx.tracked_products.update({
+      where: { id: trackedProductId },
+      data: {
+        current_price: result.price,
+        current_mrp: result.mrp,
+        currency: result.currency,
+        current_stock_qty: result.stockQty,
+        last_success_at: finishedAt,
+        last_attempt_at: finishedAt,
+        last_outcome: 'success',
+        consecutive_failures: 0,
+        updated_at: new Date(),
+      },
+    });
+    return attempt.id;
   });
 }
 
@@ -85,36 +102,44 @@ export async function recordSuccess({ runId, trackedProductId, attemptNumber, st
  * Retried / failed attempt: attempt row only; current price/stock are never touched.
  * A final failure also bumps consecutive_failures.
  */
-export async function recordFailure({ runId, trackedProductId, attemptNumber, startedAt, finishedAt, outcome, method, error }) {
-  return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `insert into scrape_attempts
-         (run_id, tracked_product_id, attempt_number, started_at, finished_at, duration_ms, outcome, method,
-          http_status, error_code, error_message, manifest_revision, raw_price_text, raw_stock_text)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       returning id`,
-      [runId, trackedProductId, attemptNumber, startedAt, finishedAt, finishedAt - startedAt, outcome, method,
-        error.httpStatus ?? null, error.code, String(error.message).slice(0, 1000), error.manifestRevision ?? null,
-        error.rawPriceText ?? null, error.rawStockText ?? null],
-    );
-    await client.query(
-      `update tracked_products
-          set last_attempt_at = $2, last_outcome = $3,
-              consecutive_failures = consecutive_failures + $4, updated_at = now()
-        where id = $1`,
-      [trackedProductId, finishedAt, outcome, outcome === 'failed' ? 1 : 0],
-    );
-    return rows[0].id;
+export function recordFailure({ runId, trackedProductId, attemptNumber, startedAt, finishedAt, outcome, method, error }) {
+  return transaction(async (tx) => {
+    const attempt = await tx.scrape_attempts.create({
+      data: {
+        run_id: runId,
+        tracked_product_id: trackedProductId,
+        attempt_number: attemptNumber,
+        started_at: startedAt,
+        finished_at: finishedAt,
+        duration_ms: finishedAt - startedAt,
+        outcome,
+        method,
+        http_status: error.httpStatus ?? null,
+        error_code: error.code,
+        error_message: String(error.message).slice(0, 1000),
+        manifest_revision: error.manifestRevision ?? null,
+        raw_price_text: error.rawPriceText ?? null,
+        raw_stock_text: error.rawStockText ?? null,
+      },
+    });
+    await tx.tracked_products.update({
+      where: { id: trackedProductId },
+      data: {
+        last_attempt_at: finishedAt,
+        last_outcome: outcome,
+        consecutive_failures: { increment: outcome === 'failed' ? 1 : 0 },
+        updated_at: new Date(),
+      },
+    });
+    return attempt.id;
   });
 }
 
 export async function getRunSummary(runId) {
-  const { rows } = await query(
-    `select r.*, (select count(*)::int from scrape_attempts a where a.run_id = r.id) as attempts
-       from scrape_runs r where r.id = $1`,
-    [runId],
-  );
-  const r = rows[0];
+  const r = await db().scrape_runs.findUnique({
+    where: { id: runId },
+    include: { _count: { select: { scrape_attempts: true } } },
+  });
   if (!r) return null;
   return {
     runId: r.id,
@@ -126,18 +151,22 @@ export async function getRunSummary(runId) {
     targets: r.target_count,
     successes: r.success_count,
     failures: r.failure_count,
-    attempts: r.attempts,
+    attempts: r._count.scrape_attempts,
   };
 }
 
-export async function getLastCronRun() {
-  const { rows } = await query(
-    `select started_at, status from scrape_runs where trigger_source = 'cron' order by started_at desc limit 1`,
-  );
-  return rows[0] ?? null;
+export function getLastCronRun() {
+  return db().scrape_runs.findFirst({
+    where: { trigger_source: 'cron' },
+    orderBy: { started_at: 'desc' },
+    select: { started_at: true, status: true },
+  });
 }
 
-/** Cross-instance guard: a session-level advisory lock held on a dedicated client for the whole batch. */
+/**
+ * Cross-instance guard: a session-level advisory lock held on a dedicated pg client for the
+ * whole batch. Stays on raw pg because Prisma can't pin one connection for minutes.
+ */
 const BATCH_LOCK_KEY = 72_531_001;
 
 export async function tryAcquireBatchLock() {
@@ -157,18 +186,26 @@ export async function tryAcquireBatchLock() {
   }
 }
 
+/** Every attempt (incl. retried/failed) for the CSV, in pages so memory stays flat. */
 export async function* exportAttempts(batchSize = 2000) {
-  for (let offset = 0; ; offset += batchSize) {
-    const { rows } = await query(
-      `select tp.store_product_id as product_id, tp.product_name, tp.selected_option,
-              sa.started_at as timestamp, sa.extracted_price as price, sa.extracted_stock_qty as stock, sa.outcome
-         from scrape_attempts sa
-         join tracked_products tp on tp.id = sa.tracked_product_id
-        order by sa.started_at asc, sa.attempt_number asc, sa.id asc
-        limit $1 offset $2`,
-      [batchSize, offset],
-    );
-    if (rows.length) yield rows;
+  for (let skip = 0; ; skip += batchSize) {
+    const rows = await db().scrape_attempts.findMany({
+      include: { tracked_products: { select: { store_product_id: true, product_name: true, selected_option: true } } },
+      orderBy: [{ started_at: 'asc' }, { attempt_number: 'asc' }, { id: 'asc' }],
+      take: batchSize,
+      skip,
+    });
+    if (rows.length) {
+      yield rows.map((r) => ({
+        product_id: r.tracked_products.store_product_id,
+        product_name: r.tracked_products.product_name,
+        selected_option: r.tracked_products.selected_option,
+        timestamp: r.started_at,
+        price: r.extracted_price === null ? null : r.extracted_price.toFixed(2),
+        stock: r.extracted_stock_qty,
+        outcome: r.outcome,
+      }));
+    }
     if (rows.length < batchSize) return;
   }
 }

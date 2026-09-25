@@ -1,11 +1,13 @@
 import { getListingsPage, LISTING_PAGE_LIMIT } from './storeClient.js';
+import { sleep } from '../scraper/retry.js';
 
 /**
  * Collects the full catalog despite the listing API returning a different random order
  * on every request (docs/architecture.md §3.1): repeat full passes, dedupe by id, stop
  * once unique ids == reported count or the pass limit is hit.
  */
-export async function collectCatalog({ maxPasses = 15, fetchPage = getListingsPage, log = () => {} } = {}) {
+// Pause between listing requests: back-to-back passes (~100 requests) got the store to answer 429.
+export async function collectCatalog({ maxPasses = 15, fetchPage = getListingsPage, pageDelayMs = 250, log = () => {} } = {}) {
   const byId = new Map();
   let count = null;
   let passes = 0;
@@ -18,6 +20,7 @@ export async function collectCatalog({ maxPasses = 15, fetchPage = getListingsPa
     const totalPages = first.totalPages;
     const pages = [first];
     for (let page = 2; page <= totalPages; page++) {
+      await sleep(pageDelayMs);
       pages.push(await fetchPage(page, LISTING_PAGE_LIMIT));
     }
     for (const { results = [] } of pages) {

@@ -50,6 +50,12 @@ export async function scrapePrice(browser, target, { fallbackManifest = null, pr
     await page.locator(SEL.consentReject).click({ timeout: 5_000 }).catch(() => {});
   });
 
+  // The page loads its own manifest on start; wait for that response rather than racing the handler.
+  const pageManifest = page
+    .waitForResponse((res) => res.url().includes('/api/v2/ui/manifest') && res.ok(), { timeout: config.browserNavTimeoutMs })
+    .then((res) => res.json())
+    .catch(() => null);
+
   try {
     log(`open ${productUrl(target.storeProductId)}`);
     await page.goto(productUrl(target.storeProductId), { waitUntil: 'domcontentloaded' });
@@ -63,6 +69,8 @@ export async function scrapePrice(browser, target, { fallbackManifest = null, pr
     if (!sameText(pageName, target.productName)) {
       throw new ScrapeError('NAME_MISMATCH', `Page shows "${pageName}", expected "${target.productName}"`, { kind: Kind.PERMANENT });
     }
+    const loaded = await pageManifest;
+    if (loaded?.classes) manifest = loaded;
     if (!manifest?.classes) {
       throw new ScrapeError('STRUCTURE_CHANGED', 'UI manifest unavailable', { kind: Kind.STRUCTURE });
     }
@@ -203,9 +211,21 @@ async function waitForPriceReady(page, panel, priceSelector, timeoutMs, getQuote
     throw err;
   }
   const panelText = ((await panel.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').slice(0, 200);
+  // The price element exists but never became readable (still dimmed/empty): a load problem, not a page shift.
+  const stuck = await panel.locator(priceSelector).evaluateAll((els) => els
+    .filter((e) => e.offsetParent !== null)
+    .map((e) => ({ opacity: getComputedStyle(e).opacity, text: e.innerText.replace(/[\u200B\s]+/g, ''), style: e.getAttribute('style') })),
+  ).catch(() => []);
+  if (stuck.length) {
+    throw new ScrapeError('PRICE_NOT_READY', `Price never settled within ${timeoutMs} ms: ${JSON.stringify(stuck).slice(0, 400)} (panel: "${panelText}")`);
+  }
   if (await isOfferReady(panel)) {
     // Panel says ready but the manifest-classed price element is missing: the page shifted.
-    throw new ScrapeError('STRUCTURE_CHANGED', `Price element ${priceSelector} not found in ready panel`, { kind: Kind.STRUCTURE });
+    // Record which elements the price row did contain, for diagnosing the shift from the log.
+    const found = await panel.locator('.offer-row > *').evaluateAll((els) =>
+      els.map((e) => `${e.tagName.toLowerCase()}.${[...e.classList].join('.')}${e.offsetParent === null ? '(hidden)' : ''}`).join(' '),
+    ).catch(() => '?');
+    throw new ScrapeError('STRUCTURE_CHANGED', `Price element ${priceSelector} not found in ready panel (row: ${found})`, { kind: Kind.STRUCTURE });
   }
   throw new ScrapeError('CHALLENGE_TIMEOUT', `Price did not load within ${timeoutMs} ms (panel: "${panelText}")`);
 }

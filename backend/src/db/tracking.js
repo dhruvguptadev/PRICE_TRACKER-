@@ -1,9 +1,5 @@
-import { query, toNumber, toIso } from './pool.js';
-
-const TRACKED_COLUMNS = `
-  id, store_product_id, product_name, product_url, option_axis, selected_option, selected_option_key,
-  active, current_price, current_mrp, currency, current_stock_qty, last_success_at, last_attempt_at,
-  last_outcome, consecutive_failures, created_at, updated_at`;
+import { db } from './prisma.js';
+import { toNumber, toIso } from './pool.js';
 
 export function mapTracked(r) {
   return {
@@ -29,93 +25,91 @@ export function mapTracked(r) {
   };
 }
 
-export async function findByTarget(storeProductId, optionKey) {
+export function findByTarget(storeProductId, optionKey) {
   // Prefer the active row; otherwise the most recently updated inactive one (to reactivate).
-  const { rows } = await query(
-    `select ${TRACKED_COLUMNS} from tracked_products
-      where store_product_id = $1 and selected_option_key = $2
-      order by active desc, updated_at desc limit 1`,
-    [storeProductId, optionKey],
-  );
-  return rows[0] ?? null;
+  return db().tracked_products.findFirst({
+    where: { store_product_id: storeProductId, selected_option_key: optionKey },
+    orderBy: [{ active: 'desc' }, { updated_at: 'desc' }],
+  });
 }
 
-export async function insertTracked(t) {
-  const { rows } = await query(
-    `insert into tracked_products
-       (store_product_id, product_name, product_url, option_axis, selected_option, selected_option_key)
-     values ($1, $2, $3, $4, $5, $6)
-     returning ${TRACKED_COLUMNS}`,
-    [t.storeProductId, t.productName, t.productUrl, t.optionAxis, t.selectedOption, t.selectedOptionKey],
-  );
-  return rows[0];
+export function insertTracked(t) {
+  return db().tracked_products.create({
+    data: {
+      store_product_id: t.storeProductId,
+      product_name: t.productName,
+      product_url: t.productUrl,
+      option_axis: t.optionAxis,
+      selected_option: t.selectedOption,
+      selected_option_key: t.selectedOptionKey,
+    },
+  });
 }
 
 /** Reactivate a soft-deleted target, refreshing its name/label snapshot from the store. */
-export async function reactivateTracked(id, t) {
-  const { rows } = await query(
-    `update tracked_products
-        set active = true, product_name = $2, product_url = $3, option_axis = $4,
-            selected_option = $5, updated_at = now()
-      where id = $1
-      returning ${TRACKED_COLUMNS}`,
-    [id, t.productName, t.productUrl, t.optionAxis, t.selectedOption],
-  );
-  return rows[0];
+export function reactivateTracked(id, t) {
+  return db().tracked_products.update({
+    where: { id },
+    data: {
+      active: true,
+      product_name: t.productName,
+      product_url: t.productUrl,
+      option_axis: t.optionAxis,
+      selected_option: t.selectedOption,
+      updated_at: new Date(),
+    },
+  });
 }
 
 export async function listTracked({ active, limit, offset }) {
-  const where = active === undefined ? '' : 'where active = $3';
-  const params = active === undefined ? [limit, offset] : [limit, offset, active];
-  const [{ rows }, { rows: countRows }] = await Promise.all([
-    query(`select ${TRACKED_COLUMNS} from tracked_products ${where} order by created_at asc limit $1 offset $2`, params),
-    query(`select count(*)::int as total from tracked_products ${active === undefined ? '' : 'where active = $1'}`,
-      active === undefined ? [] : [active]),
+  const where = active === undefined ? {} : { active };
+  const [rows, total] = await Promise.all([
+    db().tracked_products.findMany({ where, orderBy: { created_at: 'asc' }, take: limit, skip: offset }),
+    db().tracked_products.count({ where }),
   ]);
-  return { rows, total: countRows[0].total };
+  return { rows, total };
 }
 
-export async function listActiveTargets() {
-  const { rows } = await query(`select ${TRACKED_COLUMNS} from tracked_products where active order by created_at asc`);
-  return rows;
+export function listActiveTargets() {
+  return db().tracked_products.findMany({ where: { active: true }, orderBy: { created_at: 'asc' } });
 }
 
-export async function getTracked(id) {
-  const { rows } = await query(`select ${TRACKED_COLUMNS} from tracked_products where id = $1`, [id]);
-  return rows[0] ?? null;
+export function getTracked(id) {
+  return db().tracked_products.findUnique({ where: { id } });
 }
 
 export async function getAttemptSummary(id) {
-  const { rows } = await query(
-    `select count(*)::int as attempts,
-            count(*) filter (where outcome = 'success')::int as successes,
-            count(*) filter (where outcome = 'retried')::int as retries,
-            count(*) filter (where outcome = 'failed')::int as failures
-       from scrape_attempts where tracked_product_id = $1`,
-    [id],
-  );
-  return rows[0];
+  const groups = await db().scrape_attempts.groupBy({
+    by: ['outcome'],
+    where: { tracked_product_id: id },
+    _count: { _all: true },
+  });
+  const count = (outcome) => groups.find((g) => g.outcome === outcome)?._count._all ?? 0;
+  return {
+    attempts: groups.reduce((sum, g) => sum + g._count._all, 0),
+    successes: count('success'),
+    retries: count('retried'),
+    failures: count('failed'),
+  };
 }
 
 export async function deactivateTracked(id) {
-  const { rows } = await query(
-    `update tracked_products set active = false, updated_at = now() where id = $1 returning id, active`,
-    [id],
-  );
-  return rows[0] ?? null;
+  const { count } = await db().tracked_products.updateMany({
+    where: { id },
+    data: { active: false, updated_at: new Date() },
+  });
+  return count ? { id, active: false } : null;
 }
 
 export async function getHistory(id, { from, to, limit }) {
-  const { rows } = await query(
-    `select captured_at, price, mrp, currency, stock_qty
-       from price_observations
-      where tracked_product_id = $1
-        and ($2::timestamptz is null or captured_at >= $2)
-        and ($3::timestamptz is null or captured_at <= $3)
-      order by captured_at asc
-      limit $4`,
-    [id, from ?? null, to ?? null, limit],
-  );
+  const rows = await db().price_observations.findMany({
+    where: {
+      tracked_product_id: id,
+      captured_at: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) },
+    },
+    orderBy: { captured_at: 'asc' },
+    take: limit,
+  });
   return rows.map((r) => ({
     capturedAt: toIso(r.captured_at),
     price: toNumber(r.price),
@@ -126,19 +120,18 @@ export async function getHistory(id, { from, to, limit }) {
 }
 
 export async function getScrapeLogs(id, { limit, offset }) {
-  const { rows } = await query(
-    `select sa.*, sr.run_key, sr.trigger_source
-       from scrape_attempts sa join scrape_runs sr on sr.id = sa.run_id
-      where sa.tracked_product_id = $1
-      order by sa.started_at desc, sa.attempt_number desc
-      limit $2 offset $3`,
-    [id, limit, offset],
-  );
+  const rows = await db().scrape_attempts.findMany({
+    where: { tracked_product_id: id },
+    include: { scrape_runs: { select: { run_key: true, trigger_source: true } } },
+    orderBy: [{ started_at: 'desc' }, { attempt_number: 'desc' }],
+    take: limit,
+    skip: offset,
+  });
   return rows.map((r) => ({
     id: r.id,
     runId: r.run_id,
-    runKey: r.run_key,
-    triggerSource: r.trigger_source,
+    runKey: r.scrape_runs.run_key,
+    triggerSource: r.scrape_runs.trigger_source,
     attemptNumber: r.attempt_number,
     startedAt: toIso(r.started_at),
     finishedAt: toIso(r.finished_at),
