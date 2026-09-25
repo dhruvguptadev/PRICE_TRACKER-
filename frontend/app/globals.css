@@ -63,11 +63,20 @@
   --color-critical-ink: var(--critical-ink);
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
 }
 
 body {
   background: var(--page);
   color: var(--ink);
+}
+
+/* Faint dot grid behind the landing hero, fading out towards the bottom. */
+.bg-dots {
+  background-image: radial-gradient(var(--axis) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse 80% 70% at 70% 40%, #000 30%, transparent 75%);
 }
 
 .tabular {

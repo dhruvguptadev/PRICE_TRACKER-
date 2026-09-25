@@ -128,8 +128,10 @@ Start frontend in another terminal:
 
 ```bash
 cd frontend
-npm run dev -- -p 3001
+npm run dev
 ```
+
+The frontend's scripts pin port 3001, because the backend uses 3000.
 
 Open http://localhost:3001.
 
