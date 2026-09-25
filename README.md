@@ -6,6 +6,17 @@ A full-stack price/stock tracker for the provided mock storefront:
 
 The application allows a user to search for a product, select a specific option/variant, track it, and view scheduled price/stock history and scrape logs.
 
+## Live
+
+| | URL |
+|---|---|
+| App (Vercel) | https://frontend-liard-rho-77.vercel.app |
+| Dashboard | https://frontend-liard-rho-77.vercel.app/dashboard |
+| API (Render) | https://price-tracker-api-rqd5.onrender.com/api/health |
+| CSV export | https://price-tracker-api-rqd5.onrender.com/api/export.csv |
+
+The API runs on Render's free tier and sleeps when idle, so the first request after a quiet period can take up to a minute.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -155,7 +166,7 @@ Test layers:
 **Every 2 hours**, triggered by cron-job.org:
 
 ```http
-POST https://<render-service>.onrender.com/api/scrape/run
+POST https://price-tracker-api-rqd5.onrender.com/api/scrape/run
 Authorization: Bearer <SCRAPE_TRIGGER_SECRET>
 ```
 
@@ -263,19 +274,19 @@ Render free instances have 512 MB RAM, so the scraper runs one browser and one t
 ### 3. Vercel
 
 - Import the repo → root directory `frontend/` (Next.js preset).
-- Set `NEXT_PUBLIC_API_BASE_URL=https://<render-service>.onrender.com/api`.
+- Set `NEXT_PUBLIC_API_BASE_URL=https://price-tracker-api-rqd5.onrender.com/api`.
 - Set the backend's `FRONTEND_ORIGIN` to the Vercel URL (CORS).
 
 ### 4. Scheduler (cron-job.org)
 
 Warm-up job:
 
-- URL: `https://<render-service>.onrender.com/api/health`, method `GET`
+- URL: `https://price-tracker-api-rqd5.onrender.com/api/health`, method `GET`
 - Schedule: 5 minutes before each scrape (`55 1-23/2 * * *`)
 
 Scrape job:
 
-- URL: `https://<render-service>.onrender.com/api/scrape/run`, method `POST`
+- URL: `https://price-tracker-api-rqd5.onrender.com/api/scrape/run`, method `POST`
 - Header: `Authorization: Bearer <SCRAPE_TRIGGER_SECRET>`
 - Schedule: every 2 hours (`0 */2 * * *`)
 

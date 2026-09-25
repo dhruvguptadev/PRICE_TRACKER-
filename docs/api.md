@@ -5,7 +5,7 @@
 Base URL:
 
 ```text
-https://<render-service>.onrender.com/api
+https://price-tracker-api-rqd5.onrender.com/api
 ```
 
 Local:
