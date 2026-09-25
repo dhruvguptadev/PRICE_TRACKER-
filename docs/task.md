@@ -157,23 +157,23 @@ Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
 
 ### Dashboard
 
-- [ ] `lib/api.js` using `NEXT_PUBLIC_API_BASE_URL`.
-- [ ] Search input + results.
-- [ ] Product detail + option selector.
-- [ ] Track button.
-- [ ] Tracked products table: current price, MRP, stock, last success, last outcome, failure count.
-- [ ] Per-product page: history chart (price + stock) and table.
-- [ ] Scrape log (all attempts, failures highlighted).
-- [ ] Export button → `/api/export.csv`.
+- [x] `lib/api.js` using `NEXT_PUBLIC_API_BASE_URL`.
+- [x] Search input + results.
+- [x] Product detail + option selector.
+- [x] Track button.
+- [x] Tracked products table: current price, MRP, stock, last success, last outcome, failure count.
+- [x] Per-product page: history chart (price + stock) and table.
+- [x] Scrape log (all attempts, failures highlighted).
+- [x] Export button → `/api/export.csv`.
 
 ### UX states
 
-- [ ] Loading (including Render cold start: "waking backend…")
-- [ ] Empty search / no results
-- [ ] No tracked products
-- [ ] API error
-- [ ] Never scraped
-- [ ] Last scrape failed (show last known good price with its timestamp)
+- [x] Loading (including Render cold start: "waking backend…")
+- [x] Empty search / no results
+- [x] No tracked products
+- [x] API error
+- [x] Never scraped
+- [x] Last scrape failed (show last known good price with its timestamp)
 
 ### Vercel
 
