@@ -89,12 +89,15 @@ Failure remains visible as failure; previous value is not overwritten
 
 The application shall allow partial or full product-name search against the provided storefront.
 
+The store has no server-side search and its listing API returns a random order on every request. Search therefore runs against a local catalog cache (`catalog_products`) synced from the store's listing API.
+
 Acceptance criteria:
 
-- Empty query does not trigger an unnecessary external scrape.
-- Partial text can return matching products.
-- Search results expose enough information to identify the correct product.
-- Product page URL and the store product ID derived from the URL are retained.
+- Empty query does not trigger a search.
+- Partial text (case-insensitive) returns matching products by name or brand.
+- Catalog sync collects all products the store reports (`count`), with duplicates removed across shuffled pages. Incompleteness is reported, not hidden.
+- Search results expose name, brand and category to identify the correct product.
+- Product page URL (`/item/<id>`) and the numeric store product ID are retained.
 
 ### FR-02 Product Option Selection
 
@@ -102,8 +105,9 @@ The application shall allow the user to choose the exact product option/variant 
 
 Acceptance criteria:
 
-- A tracked item contains the selected option label.
-- The scraper reads the price/stock for that exact option.
+- Options are loaded live from the store (`optionAxis` + `options[{id,label}]`).
+- A tracked item contains the option axis, the option label and the store option key (e.g. `o1`).
+- The scraper confirms the tracked option is active on the page before reading price/stock.
 - Changing an option creates a new tracking target or explicitly updates the tracked target; it must not silently mix histories.
 
 ### FR-03 Create Tracking Record
@@ -113,7 +117,8 @@ The user shall be able to add a selected product option to tracked items.
 Acceptance criteria:
 
 - Tracking target is persisted in Supabase.
-- Duplicate tracking targets are prevented through an application-level check and database uniqueness constraint where practical.
+- Duplicate active tracking targets are prevented by an application check and a unique index over active rows. Re-tracking a deactivated target reactivates it and keeps its history.
+- Product name, URL and option label are taken from the store, not from client input.
 - The tracking record retains the source URL and option information required by the scraper.
 
 ### FR-04 Scheduled Scraping
@@ -123,22 +128,24 @@ Each active tracked product option shall be scraped once every 2 hours.
 Acceptance criteria:
 
 - The system uses an external scheduler or scheduled function rather than depending on an always-running in-process timer.
-- A scheduler-triggered run is safe to retry.
+- A scheduler-triggered run is safe to retry: runs are keyed by their 2-hour UTC slot (`run_key`), so a duplicate trigger is a no-op.
 - A single target is not concurrently scraped twice by overlapping runs.
 - One target failing does not prevent the remaining targets from being processed.
 
 ### FR-05 Scraper Reliability
 
-The scraper shall use lightweight HTTP fetching and HTML parsing where sufficient, and Playwright only when JavaScript rendering is genuinely required.
+The scraper shall use lightweight HTTP where the store exposes the data (catalog, options, UI manifest) and Playwright only for price and stock, which the store reveals only after a browser-side challenge and mouse-hover check.
 
 Acceptance criteria:
 
-- Explicit request timeouts are configured.
-- Recoverable failures are retried with bounded exponential backoff.
-- Non-recoverable failures terminate the target attempt cleanly.
-- Dynamic content is given an explicit wait strategy rather than relying on arbitrary long sleeps.
+- Explicit HTTP, navigation and price-ready timeouts are configured.
+- Transient failures and page shifts are retried with bounded exponential backoff (max 3 attempts).
+- Permanent failures (product gone, option no longer offered) fail immediately and cleanly.
+- Dynamic content uses condition-based waits (price visible and not pending), not arbitrary sleeps.
+- Selectors come from the store's UI manifest on each run, never hard-coded rotating class names.
+- The hidden decoy price element is never used.
 - Extraction validates required fields before a successful history row is committed.
-- A scraper parser mismatch results in failure, not guessed data.
+- A parser mismatch that persists across all attempts results in a `failed` attempt (`STRUCTURE_CHANGED`), not guessed data.
 
 ### FR-06 Price and Stock History
 
@@ -160,7 +167,7 @@ Required outcome values:
 - `retried`
 - `failed`
 
-Recommended implementation detail: store one log row per attempt, with `attempt_number`, `run_id`, and `outcome`. This preserves the assignment's required outcomes while still exposing retry detail.
+Implementation: one log row per attempt, with `attempt_number`, `run_id`, `outcome`, `error_code` and `error_message`. `retried` means "this attempt failed and another attempt followed"; `failed` means "final attempt failed". This interpretation is documented in the README so reviewers read the log correctly.
 
 ### FR-08 CSV Export
 
@@ -168,15 +175,19 @@ An Export action shall download full scrape history as CSV.
 
 Each row shall contain:
 
-- store product ID as shown in the product-page URL
+- store product ID as shown in the product-page URL (numeric `id` in `/item/<id>`)
 - product name
 - selected option
 - timestamp in ISO 8601 UTC
-- price
-- stock
-- outcome
+- price (main displayed price, as a number)
+- stock (unit count; 0 = sold out)
+- outcome (`success` / `retried` / `failed`)
 
-Failed rows shall have empty price and stock.
+Retried and failed rows shall have empty price and stock.
+
+### Tracked Price Definition
+
+The product page may show MRP (struck-through), a sale price and a member price. The tracked **price** is the main displayed price, i.e. what a normal customer pays. MRP is stored as extra information. Member price is not tracked.
 
 ### FR-09 Headed Run
 
@@ -184,8 +195,8 @@ The backend shall expose a controlled way to start a scraper run in headed mode 
 
 Acceptance criteria:
 
-- A developer can launch Playwright with a visible browser locally.
-- The headed mode follows the same extraction logic as production as far as possible.
+- A developer can launch Playwright with a visible browser locally via a CLI command (not an HTTP endpoint; Render has no display).
+- The headed mode uses the same scraper code as production, with slowed-down actions.
 - A demo scenario can show a slow or failed response and the retry/failure handling.
 
 ## 7. Non-Functional Requirements
@@ -215,7 +226,11 @@ Dashboard reads should use stored data rather than scraping on every page reques
 
 ### NFR-06 Deployability
 
-The application shall run on Vercel + Render + Supabase and work despite backend sleep/cold-start constraints.
+The application shall run on Vercel + Render + Supabase and work despite backend sleep/cold-start constraints:
+
+- The scheduler endpoint responds `202` immediately and scrapes in the background (cron-job.org times out after ~30 s).
+- The scraper fits in Render free's 512 MB: one browser, sequential targets, always closed.
+- The database is reached through the Supabase session pooler (Render has no outbound IPv6).
 
 ### NFR-07 Maintainability
 
@@ -263,14 +278,22 @@ Scraper code should be separated from HTTP routes and persistence. The parser mu
 5. Only a validated successful extraction can update the latest state.
 6. Source page/option identity is immutable for a tracking target unless an explicit update operation is performed.
 
-## 10. Assumptions
+## 10. Verified Store Facts and Remaining Assumptions
 
-These are design assumptions, not facts guaranteed by the assignment:
+Verified by inspection on 2026-09-25 (details in `research.md`):
 
-- The storefront exposes enough product information in a product listing/search page or predictable product pages to locate products.
-- The exact CSS/XPath selectors may change; therefore the scraper should centralize selectors and include validation guards.
-- A single backend deployment can handle the expected assignment-scale workload.
-- Authentication for end users is unnecessary for the assignment unless the live environment requires it.
+- The store is a client-rendered SPA; HTML contains no product data.
+- Catalog (960 products) and options are available from a JSON API; listing order is random per request.
+- Product pages are `/item/<id>`.
+- Price and stock are available only in a browser, after a challenge + hover.
+- CSS class names rotate per UI manifest revision; a hidden decoy price element exists.
+- Stock is shown as a unit count or "Sold out".
+
+Remaining assumptions:
+
+- Playwright Chromium fits within Render free-tier memory for sequential scraping of a few targets.
+- A single backend deployment can handle the assignment-scale workload.
+- End-user authentication is unnecessary for the assignment.
 
 ## 11. Traceability to Assignment Brief
 

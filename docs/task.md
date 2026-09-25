@@ -6,20 +6,22 @@
 
 The assignment is time-boxed. Prioritize the evaluated core: reliable scraping, honest logs, scheduled execution, persistence, deployment, and a convincing headed-mode demonstration.
 
+**Critical path:** the deployed scraper must run unattended for as long as possible before submission (12 runs/day at a 2-hour interval). Deploy the scraper + scheduler early and polish afterwards.
+
 ## 2. Execution Strategy
 
 Build in vertical slices instead of completing the frontend first:
 
 ```text
-1. Inspect target store
+1. Inspect target store               ✅ done (research.md §3)
 2. Lock scraper contract
 3. Set up database
-4. Build scraper + tests
+4. Build catalog client + price scraper + tests
 5. Build scrape orchestration
 6. Build API
-7. Build dashboard
-8. Add scheduler
-9. Deploy
+7. Deploy backend + scheduler         ← start unattended runs ASAP
+8. Build dashboard
+9. Deploy frontend
 10. Validate unattended behavior
 11. Record demo
 12. Final submission check
@@ -27,294 +29,232 @@ Build in vertical slices instead of completing the frontend first:
 
 ## 3. Phase 0 — Repository Bootstrap
 
-- [ ] Create repository.
-- [ ] Create `frontend/` and `backend/`.
-- [ ] Add root `.gitignore`.
-- [ ] Add `README.md`.
-- [ ] Add `docs/` documentation.
-- [ ] Add `.env.example` for frontend/backend.
-- [ ] Use Node.js version documented by the local environment and hosted runtime.
-- [ ] Configure ESLint/Prettier if time permits.
-- [ ] Add npm scripts: `dev`, `build`, `start`, `test`.
+- [x] Create repository.
+- [x] Create `frontend/` (Next.js 16) and `backend/` (Express 5).
+- [x] Add root `.gitignore`.
+- [x] Add `README.md` at repo root.
+- [x] Add `docs/` documentation.
+- [ ] Add `backend/.env.example` and `frontend/.env.example`.
+- [ ] Fix `backend/package.json` entry point (`main`/`start` → `src/server.js`).
+- [ ] Add backend npm scripts: `dev`, `start`, `test`, `scrape:headed`.
+- [ ] Pin Node version (`"engines": { "node": ">=20" }`).
 
-Deliverable:
+## 4. Phase 1 — Inspect the Mock Store ✅
 
-```text
-repo boots locally
-```
-
-## 4. Phase 1 — Inspect the Mock Store (Critical)
-
-Do this before finalizing selectors or schema assumptions.
-
-- [ ] Open target homepage.
-- [ ] Identify search flow.
-- [ ] Search by partial product name.
-- [ ] Record product-card structure.
-- [ ] Record product URL structure.
-- [ ] Extract store product ID from product URL.
-- [ ] Open at least 3 products.
-- [ ] Identify all selectable options on each.
-- [ ] Identify exact price element or JSON source.
-- [ ] Identify stock element/state.
-- [ ] Inspect Network tab for XHR/fetch requests.
-- [ ] Determine whether initial HTML contains price/stock.
-- [ ] Record slow/failing behavior observed.
-- [ ] Save representative HTML as fixtures.
-
-**Important:** do not invent selectors, product IDs, or dynamic behavior before this inspection.
+- [x] Open target homepage: SPA shell, no data in HTML.
+- [x] Identify search flow: no server search; listings are shuffled per request.
+- [x] Record product URL structure: `/item/:id`.
+- [x] Extract store product ID from product URL: numeric `id`.
+- [x] Identify options: `optionAxis` + `options[{id,label}]` from `/api/v2/items/:id`.
+- [x] Identify price source: browser-only after challenge + hover.
+- [x] Identify stock: count pill / "Sold out".
+- [x] Inspect network/bundle: `/api/v2/listings`, `/api/v2/items/:id`, `/api/v2/ui/manifest`.
+- [ ] Confirm option-selection UI and hover behavior in a headed browser.
+- [ ] Save fixtures: manifest JSON, item JSON, rendered DOM snapshots (split price, sale price, sold out).
 
 ## 5. Phase 2 — Supabase Database
 
 - [ ] Create Supabase project.
-- [ ] Create tables from `DATABASE.md`.
-- [ ] Create indexes.
-- [ ] Add constraints/checks.
-- [ ] Test insert success attempt.
-- [ ] Test insert failed attempt.
-- [ ] Test transaction for successful observation + current-state update.
-- [ ] Verify failed attempt does not change current state.
+- [ ] Write `backend/db/schema.sql` from `database.md` §9 and run it.
+- [ ] Connect via **session pooler** string (`DATABASE_URL`).
+- [ ] Test success transaction (attempt + observation + current state).
+- [ ] Test failed attempt leaves current state unchanged.
+- [ ] Verify CHECK blocks price on non-success attempts.
 - [ ] Verify history query ordering.
 
-## 6. Phase 3 — Scraper Core (Highest Priority)
+## 6. Phase 3 — Store Client + Scraper Core (Highest Priority)
 
-### HTTP Path
+### Store client (HTTP)
 
-- [ ] Implement fetcher with timeout.
-- [ ] Set a realistic User-Agent.
-- [ ] Capture status and duration.
-- [ ] Parse HTML.
-- [ ] Extract target product.
-- [ ] Extract selected option.
-- [ ] Extract price.
-- [ ] Extract stock.
+- [ ] `fetchJson` with timeout, retry on 429/5xx/network errors.
+- [ ] `getListingsPage`, `getItem`, `getManifest`.
+- [ ] Catalog sync: repeated full passes until unique IDs == `count` (max passes), upsert `catalog_products`, report completeness.
 
-### Validation
+### Price scraper (Playwright)
 
-- [ ] Reject missing product identity.
-- [ ] Reject wrong option.
-- [ ] Reject missing price.
-- [ ] Reject invalid price.
-- [ ] Reject unknown stock unless the business rule permits `unknown`.
-- [ ] Return structured result.
+- [ ] Install Playwright + Chromium.
+- [ ] Browser lifecycle: one browser per batch, new context per target, close in `finally`. Block images/fonts.
+- [ ] Navigate to `/item/:id`, wait for product name.
+- [ ] Select the tracked option; confirm it is active.
+- [ ] Hover the price panel with multiple `page.mouse.move` steps + dwell; repeat if the "Hover over the price area" message persists.
+- [ ] Wait for the `priceTag.priceValue` element to be visible and not pending.
+- [ ] Read visible price text (never `.price-value` decoy); read MRP; read stock.
 
-### Retry
+### Normalization + validation
 
-- [ ] Implement max-attempt limit.
-- [ ] Implement exponential backoff.
-- [ ] Add jitter.
-- [ ] Classify retryable errors.
-- [ ] Classify permanent parsing/identity errors.
-- [ ] Record each retry.
+- [ ] Strip `​`, NBSP, currency symbol, Indian grouping → number.
+- [ ] Stock text → integer (0 for "Sold out").
+- [ ] Reject name mismatch, wrong active option, pending price, non-positive/NaN price, negative stock.
+- [ ] Unit tests with fixtures.
 
-### Browser Fallback
+### Retry + classification
 
-- [ ] Install Playwright.
-- [ ] Verify browsers can launch locally.
-- [ ] Implement browser path only for JS-required pages.
-- [ ] Use locators/condition-based waits.
-- [ ] Set navigation/action timeouts.
-- [ ] Close browser/context in `finally`.
+- [ ] Max 3 attempts, exponential backoff with jitter.
+- [ ] Transient: timeout, network, 408/429/5xx, challenge timeout, price not shown.
+- [ ] Page shifted: locator miss → retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if all attempts miss.
+- [ ] Permanent: product 404, option gone → fail immediately.
 
 ## 7. Phase 4 — Scrape Orchestration
 
-- [ ] Create `scrape_runs` record.
-- [ ] Load all active tracking targets.
-- [ ] Process targets independently.
-- [ ] Create attempt row for every attempt.
-- [ ] On success: insert observation + update current state transactionally.
-- [ ] On retry: write `retried` attempt row.
-- [ ] On final failure: write `failed` row.
-- [ ] Continue processing after target-level failure.
-- [ ] Return aggregate run summary.
-
-### Idempotency
-
-- [ ] Generate stable `run_key`.
-- [ ] Prevent duplicate attempt insertion.
-- [ ] Prevent duplicate success observation for the same logical run/target.
+- [ ] `run_key` = `cron-<UTC 2h slot>`; insert `scrape_runs` `ON CONFLICT DO NOTHING`.
+- [ ] In-process "batch running" guard + `pg_try_advisory_lock`.
+- [ ] Load active targets; process sequentially and independently.
+- [ ] Write one attempt row per attempt (`retried` / `failed` / `success`).
+- [ ] On success: attempt + observation + current state in one transaction.
+- [ ] On final failure: attempt + `consecutive_failures++`, no current-state change.
+- [ ] Finish run with counts and status (`completed` / `partial` / `failed`).
 
 ## 8. Phase 5 — Backend API
 
 - [ ] `GET /api/health`
-- [ ] `GET /api/products/search`
-- [ ] `GET /api/products/:storeProductId`
-- [ ] `POST /api/tracked-products`
+- [ ] `GET /api/products/search` (catalog cache)
+- [ ] `GET /api/products/:storeProductId` (live item + options)
+- [ ] `POST /api/catalog/sync` (protected)
+- [ ] `POST /api/tracked-products` (validate against store; reactivate if soft-deleted; queue initial scrape)
 - [ ] `GET /api/tracked-products`
 - [ ] `GET /api/tracked-products/:id`
 - [ ] `DELETE /api/tracked-products/:id`
 - [ ] `GET /api/tracked-products/:id/history`
 - [ ] `GET /api/tracked-products/:id/scrape-logs`
-- [ ] `POST /api/scrape/run`
-- [ ] `POST /api/scrape/:trackedProductId`
+- [ ] `POST /api/scrape/run` (protected, `202` + background)
+- [ ] `POST /api/scrape/:trackedProductId` (protected)
+- [ ] `GET /api/runs/:runId`
 - [ ] `GET /api/export.csv`
 
-- [ ] Add centralized validation.
-- [ ] Add centralized error middleware.
-- [ ] Add request ID.
-- [ ] Add scheduler secret middleware.
-- [ ] Restrict scrape URLs to target host.
+- [ ] Centralized validation + error middleware + request ID.
+- [ ] Bearer-secret middleware (constant-time compare).
+- [ ] CORS limited to `FRONTEND_ORIGIN`.
 
-## 9. Phase 6 — Frontend
+## 9. Phase 6 — Headed CLI
 
-### Dashboard
+- [ ] `npm run scrape:headed -- --tracked-product-id <id>` → same scraper with `headless: false`, `slowMo`, writes real attempt rows (`trigger_source = demo`).
+- [ ] Optional `--simulate-timeout` flag that lowers the price-ready timeout to force a visible retry. Must be documented and labelled as a demo aid, not presented as a real store failure.
 
-- [ ] Header + project description.
-- [ ] Search input.
-- [ ] Search results.
-- [ ] Product details/option selector.
-- [ ] Track button.
-- [ ] Tracked products cards/table.
-- [ ] Current price.
-- [ ] Current stock.
-- [ ] Last success time.
-- [ ] Failure count.
-- [ ] History chart/table.
-- [ ] Scrape log.
-- [ ] Export button.
-
-### UX States
-
-- [ ] Loading
-- [ ] Empty search
-- [ ] No tracked products
-- [ ] API error
-- [ ] Failed scrape status
-- [ ] Never scraped
-- [ ] Last successful observation
-
-## 10. Phase 7 — Scheduler
-
-- [ ] Create cron-job.org account/configuration.
-- [ ] Schedule request every 2 hours.
-- [ ] Configure `POST /api/scrape/run`.
-- [ ] Add `Authorization: Bearer ...` header.
-- [ ] Test scheduler manually.
-- [ ] Confirm Render wakes for the request.
-- [ ] Confirm database records are written.
-- [ ] Document scheduler setup in README.
-
-Alternative:
-
-- [ ] Use Render Cron Job if chosen and document why.
-
-## 11. Phase 8 — Deployment
-
-### Supabase
-
-- [ ] Production database schema migrated.
-- [ ] Production credentials stored securely.
+## 10. Phase 7 — Deploy Backend + Scheduler (do early)
 
 ### Render
 
-- [ ] Connect repository.
-- [ ] Configure Node service.
-- [ ] Configure build/start commands.
-- [ ] Add environment variables.
-- [ ] Verify Playwright runtime dependencies if used.
-- [ ] Verify `/api/health`.
+- [ ] Web service, root `backend/`.
+- [ ] Build: `npm install && npx playwright install --with-deps chromium`.
+- [ ] Start: `npm start`.
+- [ ] Env vars set.
+- [ ] `/api/health` OK; catalog synced 960/960.
+- [ ] Manual scrape succeeds on Render (check memory in Render metrics).
+
+### cron-job.org
+
+- [ ] `POST https://<render>.onrender.com/api/scrape/run`, header `Authorization: Bearer …`.
+- [ ] Schedule every 2 hours.
+- [ ] Trigger once manually; confirm `202` and rows in `scrape_runs` / `scrape_attempts`.
+- [ ] Track 2–3 products so unattended history starts accumulating.
+
+## 11. Phase 8 — Frontend (Next.js)
+
+Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
+
+### Dashboard
+
+- [ ] `lib/api.js` using `NEXT_PUBLIC_API_BASE_URL`.
+- [ ] Search input + results.
+- [ ] Product detail + option selector.
+- [ ] Track button.
+- [ ] Tracked products table: current price, MRP, stock, last success, last outcome, failure count.
+- [ ] Per-product page: history chart (price + stock) and table.
+- [ ] Scrape log (all attempts, failures highlighted).
+- [ ] Export button → `/api/export.csv`.
+
+### UX states
+
+- [ ] Loading (including Render cold start: "waking backend…")
+- [ ] Empty search / no results
+- [ ] No tracked products
+- [ ] API error
+- [ ] Never scraped
+- [ ] Last scrape failed (show last known good price with its timestamp)
 
 ### Vercel
 
-- [ ] Connect frontend repository.
-- [ ] Configure build command.
-- [ ] Configure output directory.
-- [ ] Set public API URL.
-- [ ] Verify search and dashboard.
+- [ ] Import repo, root `frontend/`, Next.js preset.
+- [ ] Set `NEXT_PUBLIC_API_BASE_URL`.
+- [ ] Update backend `FRONTEND_ORIGIN`.
 
 ## 12. Phase 9 — Production Validation
 
-- [ ] Track at least 2–3 products/options.
-- [ ] Trigger manual scrape.
-- [ ] Confirm successful observations.
-- [ ] Confirm chart/table data.
-- [ ] Confirm logs.
-- [ ] Trigger failure scenario.
-- [ ] Confirm retry rows.
-- [ ] Confirm final failure row.
-- [ ] Confirm failed rows have blank price/stock in CSV.
-- [ ] Confirm last successful state remains unchanged after failure.
-- [ ] Confirm export opens correctly in spreadsheet software.
+- [ ] 2–3 products/options tracked.
+- [ ] Several scheduled (unattended) runs recorded.
+- [ ] Chart/table data correct against the store in a browser.
+- [ ] Logs show retries/failures honestly.
+- [ ] CSV: failed/retried rows have blank price/stock; timestamps ISO UTC; opens in a spreadsheet.
+- [ ] Last successful state unchanged after a failure.
 
 ## 13. Phase 10 — Reliability Test Matrix
 
 | Scenario | Expected result |
 |---|---|
-| HTTP 200 + valid data | `success`, history row created |
-| HTTP timeout | retry; if exhausted → `failed` |
-| HTTP 503 | retry; if exhausted → `failed` |
-| HTTP 429 | retry with backoff; respect `Retry-After` when practical |
-| Product selector missing | fail honestly; no successful observation |
-| Price missing | fail honestly; no successful observation |
-| Stock delayed | browser wait/fallback or final failure |
-| Product not found | no blind retry unless transient reason is known |
+| Price loads normally | `success`, observation created |
+| Navigation timeout | retry; if exhausted → `failed` |
+| HTTP 429/5xx from store | retry with backoff; if exhausted → `failed` |
+| Challenge/hover not accepted, price never appears | retry (re-hover / reload); if exhausted → `failed` (`CHALLENGE_TIMEOUT`) |
+| Price still pending (dimmed) | keep waiting until timeout; never read |
+| Manifest classes changed | fresh manifest + retry; persistent miss → `failed` (`STRUCTURE_CHANGED`) |
+| Decoy `.price-value` present | ignored |
+| Split price with zero-width chars | normalized correctly |
+| Product sold out | `success` with stock 0 |
+| Option no longer offered | `failed` immediately (`OPTION_NOT_FOUND`) |
 | One target fails in batch | remaining targets continue |
-| Scheduler sends duplicate trigger | idempotency prevents duplicate logical success |
-| Backend wakes from sleep | request still starts run correctly |
+| Duplicate cron trigger in same slot | `200 duplicate`, no new run |
+| Backend asleep when cron fires | wakes, returns `202`, run completes |
 
-## 14. Phase 11 — Headed Demo
+## 14. Phase 11 — Headed Demo (2–4 min)
 
-Target duration: 2–4 minutes.
-
-Suggested recording sequence:
-
-1. Show the live dashboard.
-2. Search for a product.
-3. Select an option.
-4. Add it to tracking.
-5. Start headed scraper run.
-6. Show product page in browser.
-7. Show slow/failing behavior.
-8. Show retry.
-9. Show final success or honest failure.
-10. Refresh dashboard and show history/log.
-11. Click Export and show CSV.
-
-Do not fake a failure. Use a reproducible target-store behavior or a clearly documented local test mode for the demo.
+1. Show the live dashboard with tracked products and history.
+2. Search for a product, select an option, track it.
+3. Run `npm run scrape:headed` locally.
+4. Show the product page, option selection, and the hover unlocking the price.
+5. Show a slow/failing case and the retry. Use a real store failure if one occurs; otherwise use the documented `--simulate-timeout` flag and say so on camera.
+6. Show the final outcome.
+7. Refresh the dashboard: history + log.
+8. Click Export and show the CSV (including a retried/failed row).
 
 ## 15. Phase 12 — Documentation
 
-- [ ] PRD updated with final behavior.
-- [ ] ARCHITECTURE updated with actual deployed topology.
-- [ ] API updated with actual routes/status codes.
-- [ ] DATABASE updated with final schema.
-- [ ] DECISION updated with real trade-offs.
-- [ ] README setup tested from a clean machine/session.
-- [ ] Research note includes external sources and unresolved assumptions.
+- [x] Docs updated with store inspection results.
+- [ ] `decision.md` design note: add real implementation-time AI mistakes and fixes.
+- [ ] README setup tested from a clean clone.
+- [ ] README: live URLs filled in.
 
 ## 16. Final Submission Checklist
 
 - [ ] Live Vercel URL works.
 - [ ] Render API reachable.
-- [ ] Supabase database contains tracked data.
+- [ ] Supabase contains tracked data.
 - [ ] 2–3 tracked products/options exist.
-- [ ] Scrape history contains real unattended/scheduled records.
-- [ ] Scrape log contains failures/retries where demonstrated.
+- [ ] History contains real unattended/scheduled records.
+- [ ] Scrape log contains failures/retries where they happened.
 - [ ] CSV export works.
-- [ ] Headed demo video recorded.
-- [ ] Public GitHub repository is accessible.
-- [ ] README contains required environment variables and schedule.
-- [ ] Design decision note explains reliability choices and AI mistakes/corrections.
-- [ ] Resume PDF included/provided separately.
+- [ ] Headed demo video recorded (2–4 min).
+- [ ] Public GitHub repository accessible.
+- [ ] README contains setup, schedule, env vars.
+- [ ] Design note explains reliability, trade-offs, AI mistakes/corrections.
+- [ ] Resume PDF provided.
 
 ## 17. Priority Order Under Time Pressure
 
 ```text
-P0  Target-store inspection
-P0  Scraper correctness
-P0  Retry + timeout + validation
+P0  Playwright price/stock scraper + validation
+P0  Retry + timeout + classification
 P0  Honest attempt logging
 P0  Supabase persistence
-P0  2-hour scheduling
-P0  Live deployment
+P0  Deploy backend + cron (start unattended runs early)
 P0  2–3 tracked targets
+P0  Catalog sync + search
+P0  Minimal dashboard: search, track, history, log, export
 P0  Headed demo
 P1  Dashboard polish
-P1  CSV export polish
-P1  CI/CD
+P1  CI (GitHub Actions: lint + unit tests)
 P2  Alerts
-P2  Structure-change detection
-P2  Configurable frequency
+P2  Structure-change flag in UI
+P2  Configurable frequency / multi-option scrape
 ```
 
-The project should not spend significant time on P2 items while P0 reliability is incomplete.
+Do not spend time on P2 items while P0 reliability is incomplete.

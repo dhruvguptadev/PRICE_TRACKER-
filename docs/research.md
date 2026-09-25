@@ -4,9 +4,11 @@
 
 This document separates three categories:
 
-1. **Assignment facts** — directly required by the supplied PDF.
-2. **External technical guidance** — official documentation or researched implementation guidance.
-3. **Project decisions** — choices made for this implementation and therefore subject to change after target-site inspection.
+1. **Assignment facts:** directly required by the supplied PDF.
+2. **Target-store facts:** verified by inspecting https://demo.inelabteamdev.com on 2026-09-25.
+3. **External technical guidance:** official documentation.
+
+Project decisions based on these live in `decision.md`.
 
 ## 2. Assignment Facts
 
@@ -16,24 +18,69 @@ The brief requires:
 - Node.js/Express or Django backend on Render.
 - Supabase PostgreSQL.
 - Scraping via lightweight HTTP + HTML parsing where possible, with Playwright/Puppeteer only where genuinely needed.
-- Scraping every 2 hours.
-- Retries and handling for slow/error responses.
+- Scraping every 2 hours, triggered externally (free-tier backends sleep).
+- Retries and handling for slow/error responses; recover when a page shifts; never store incorrect data.
 - Price and stock history.
-- Per-product scrape logs.
-- CSV export with a specified set of columns.
-- A headed scraper run for a short screen recording.
-- At least 2–3 tracked products/options in the submitted dashboard.
-- Public GitHub repository, live site, README, design note, and resume PDF.
+- Per-product scrape logs with outcome `success` / `retried` / `failed`.
+- CSV export: product ID (from product page URL), name, option, ISO 8601 UTC timestamp, price, stock, outcome; failed rows with blank price/stock.
+- A headed scraper run and a 2–4 minute screen recording showing slow/failing handling.
+- At least 2–3 tracked products in the live dashboard, with history from real unattended runs.
+- Public GitHub repository, live site, README (setup, schedule, env vars), design note (reliability, trade-offs, what AI got wrong), resume PDF.
 
-These facts are taken directly from the assignment brief.
+## 3. Target-Store Inspection (2026-09-25)
 
-## 3. External Research Findings
+Method: `curl` of the HTML, the JS bundle (`/assets/index-*.js`) and the JSON endpoints it calls. Findings below are observed facts. Items marked *(from bundle)* were read from the client code and should be confirmed in a headed browser.
+
+### 3.1 Site shape
+
+- The HTML at `/` is a ~460-byte shell (`<div id="root">` + one module script): a client-rendered React SPA.
+- Client routes: `/` (catalog) and `/item/:id` (product page).
+- Responses from the JSON API were fast (~0.1 s) and all `200` during inspection. The brief says slow/error responses happen occasionally, so they must still be handled.
+
+### 3.2 JSON endpoints
+
+| Endpoint | Returns | Notes |
+|---|---|---|
+| `GET /api/v2/listings?page=N&limit=L` | `{ page, perPage, totalPages, count, results[] }`, where each result has `id, slug, name, brand, category, sku, description` | `count` = 960. `limit` capped at 60. **No search param** (`q` ignored). **Order is randomized per request.** |
+| `GET /api/v2/items/:id` | `id, slug, name, brand, category, sku, description, specs{…}, reviews[], optionAxis, options[{id,label}]` | **No price, no stock.** Example: `optionAxis: "Finish"`, options `o1: Oak`, `o2: Walnut`. |
+| `GET /api/v2/ui/manifest` | `revision, variant, validUntil, classes{priceWrap, priceValue, mrp, sale, badge, rating, seller, delivery, stock}, order[], priceTag, priceCarrier, …` | Obfuscated class names (e.g. `priceValue: "xsu-j2"`) that change with the revision. |
+
+**Pagination experiment:** fetching page 1 twice returned different products. One full pass over all 16 pages (limit 60) produced only **617 unique IDs out of 960**. Search must use a deduplicated cache built from repeated passes.
+
+### 3.3 Price and stock loading *(from bundle)*
+
+The price is not fetched on page load. The page:
+
+1. Fetches a challenge.
+2. Computes a proof-of-work in the browser.
+3. POSTs the solution together with hover telemetry: mouse-move samples, hover start, dwell time, and whether events were trusted. There is a minimum move count and dwell time.
+4. Receives a `pass` token. A `429` is possible here.
+5. Fetches the price for the product + option with `Authorization: <scheme> <pass>` and decodes the payload with the pass. `401`/`403` → challenge failed.
+
+UI messages while waiting: *"Hover over the price area to load the current price."* and *"Hold on — checking availability…"*.
+
+Conclusion: price/stock **require a real browser with real (Playwright) mouse input**. This is the "page genuinely requires it" case.
+
+### 3.4 Anti-scraping traps in the product page *(from bundle)*
+
+- **Decoy price:** a hidden `<span class="price-value" aria-hidden="true" style="display:none">` holding a fake value. Never read it.
+- **Rotating classes:** the real price element is `<{manifest.priceTag}>` (e.g. `output`) with class `manifest.classes.priceValue`.
+- **Split price text:** with `priceCarrier: "split"` the price text can be broken up with zero-width spaces (`​`) and NBSP. Normalize before parsing.
+- **Pending state:** while (re)loading, the price is shown with `opacity: 0.45`. Reading it then gives a stale value (e.g. the previous option's price).
+- **Multiple prices:** MRP (line-through, class `mrp`), sometimes a sale/member price (class `sale`), and the main price.
+- **Currency formatting:** `Intl.NumberFormat('en-IN', { style: 'currency' })`, so Indian digit grouping (e.g. `₹1,29,999.00`). The currency code comes from the payload (expected INR).
+- **Stock:** `stock > 0` → pill `.avail-yes` with a formatted count; otherwise `.avail-no` "Sold out".
+- **Flaky handlers:** some UI event handlers are wrapped so that ~35% of the time the event is either dropped or delayed by 900 ms. Hover/click may need to be repeated.
+
+### 3.5 Product ID for CSV
+
+Product URL is `https://demo.inelabteamdev.com/item/2765`, so `product_id = 2765` (numeric `id`, same as in the API).
+
+## 4. External Research Findings
 
 ### Express
 
-Express uses middleware and routing as the main request/response composition model. Error-handling middleware is defined separately and should be placed after routes. Async route errors can be propagated by Promise-returning handlers in current Express guidance.
-
-Sources:
+Middleware + routing composition; error middleware after routes. Express 5 forwards rejected promises from async handlers to error middleware.
 
 - https://expressjs.com/en/guide/using-middleware.html
 - https://expressjs.com/en/guide/error-handling.html
@@ -41,111 +88,63 @@ Sources:
 
 ### Playwright
 
-Playwright recommends locators as the central abstraction for element interactions, with built-in auto-waiting/retry behavior. This supports a more deterministic browser scraper than relying only on large fixed delays.
-
-Source:
+Locators with auto-waiting are the core abstraction. `page.mouse.move(x, y, { steps })` generates trusted input events, which the store's hover check requires.
 
 - https://playwright.dev/docs/locators
+- https://playwright.dev/docs/api/class-mouse
 
 ### Render
 
-Render currently exposes multiple service types, including web services and cron jobs. Render's cron jobs run a command on a defined schedule and provide run history/logs. This means Render Cron Job is technically an alternative scheduling design, although the assignment explicitly allows external cron scheduling and was written with sleeping free-tier backends in mind.
+Free web services sleep after ~15 minutes without traffic and cold-start on the next request. Free instances have 512 MB RAM. Cron Jobs are a separate paid service type. Playwright needs `npx playwright install --with-deps chromium` at build time.
 
-Sources:
-
-- https://render.com/docs/service-types
+- https://render.com/docs/free
 - https://render.com/docs/cronjobs
+
+### cron-job.org
+
+Free external scheduler; requests time out after ~30 s, so the endpoint must return quickly and work in the background.
+
+- https://cron-job.org/
 
 ### Supabase
 
-Supabase provides PostgreSQL and database-level Row Level Security capabilities. Supabase's RLS documentation recommends enabling RLS for exposed-schema tables and defining policies for access control.
+The direct database host is IPv6 by default. Platforms without IPv6 (Render) should use the Supavisor **session pooler** connection string. RLS should be enabled on exposed-schema tables.
 
-Source:
-
+- https://supabase.com/docs/guides/database/connecting-to-postgres
 - https://supabase.com/docs/guides/database/postgres/row-level-security
 
-### API Documentation
+### Next.js
 
-OpenAPI is a language-agnostic interface description format for HTTP APIs. Using a clear endpoint/response contract makes the backend easier to review and test.
+The frontend is Next.js 16. Only `NEXT_PUBLIC_*` env vars reach the browser. Version 16 has breaking changes. Consult the bundled docs in `frontend/node_modules/next/dist/docs/`.
 
-Source:
+- https://nextjs.org/docs
 
-- https://swagger.io/specification/
+## 5. Why the Chosen Architecture Fits
 
-### Observability
+- **HTTP where possible, browser where required.** Catalog/options/manifest are plain JSON. Only price/stock need Playwright. This follows the brief's preference exactly.
+- **Explicit validation.** The dangerous failure is not "the request failed" but "the page loaded and we read the decoy, a stale price, or the wrong option". Validation is part of the success condition.
+- **Append-only attempt history.** Every attempt is a row, so reviewers can distinguish transient failures, retries and final failures.
+- **Modularity without microservices.** Internal modules give most of the benefit without another deployment.
 
-For this assignment, the most useful observability layer is structured application logs plus scrape-attempt rows in PostgreSQL. Full distributed tracing is unnecessary for the assignment's scale.
+## 6. Research Questions
 
-## 4. Target-Store Research Constraint
+| Question | Status |
+|---|---|
+| How is search done? | Resolved: no server search; cache the catalog |
+| Does option selection change the DOM or trigger a request? | Partly resolved: the price request is per product + option. Confirm the UI control in headed mode |
+| Is price in HTML, JSON, or async? | Resolved: async, browser-only, gated |
+| How is stock represented? | Resolved: unit count / "Sold out" |
+| Can an option be priced without a browser? | Resolved: no (without reverse-engineering the challenge) |
+| What failures can be reproduced for the video? | Open: observe during headed runs |
+| How often does the manifest revision change? | Open |
+| Do fixtures capture enough variants? | Open: save DOM snapshots for split/non-split price, sale/no-sale, sold out |
 
-The assignment states that the mock storefront is intentionally awkward to scrape and that prices may change, some content may load asynchronously, and responses may occasionally be slow or fail.
+## 7. Validation Evidence to Keep Before Submission
 
-However, these are assignment-provided expectations. They should not be converted into more specific claims about selectors, request endpoints, HTML structure, or exact failure patterns until the store is personally inspected.
-
-Therefore:
-
-- selectors are intentionally not hard-coded in these docs
-- product URL formats are intentionally not invented
-- exact API/XHR endpoints are intentionally not invented
-- exact option identifiers are intentionally not invented
-
-Those values belong in the implementation after live inspection.
-
-## 5. Why the Recommended Architecture Fits
-
-### Modularity without microservices
-
-The scraper is the core challenge, but splitting it into a separate network service would make the assignment harder to operate. Internal modules provide most of the organizational benefit without adding another deployment.
-
-### HTTP first, browser second
-
-HTTP parsing is lighter than a browser. Browser automation is retained for genuinely client-rendered content. This directly follows the assignment's preference and keeps scheduled runs efficient.
-
-### Explicit validation
-
-The dangerous failure mode is not “the request failed”; it is “the request succeeded but the parser extracted the wrong value.” Therefore, validation has to be part of the success condition.
-
-### Append-only attempt history
-
-A scrape log is an audit trail. Treating every attempt as a row lets the reviewer distinguish a transient failure, a retried attempt, and a final failure.
-
-## 6. Research Questions to Resolve During Implementation
-
-1. Does product search happen on the server via a predictable listing/search page or by direct page traversal?
-2. Does the selected option alter the DOM or generate a network request?
-3. Is price present in initial HTML, embedded JSON, or loaded asynchronously?
-4. Is stock textual, attribute-based, or encoded in JavaScript state?
-5. Can the option be selected without a browser?
-6. What exact failure behavior can be reproduced for the video?
-7. What selectors remain stable across multiple products?
-8. Can parser fixtures capture enough variants to prevent regressions?
-
-## 7. Recommended Validation Evidence
-
-Before submission, retain evidence of:
-
-- successful HTTP scrape
-- successful browser scrape, if required
-- retry after timeout/error
-- final failure path
-- failure preserved in DB
-- successful historical observation
-- CSV export including a failure row
-- scheduled run executed by external scheduler
+- successful browser scrape (screenshot + log row)
+- retry after timeout/challenge failure
+- final failure path, with current price unchanged
+- CSV export including a retried/failed row with blank price/stock
+- scheduled runs executed by cron-job.org (cron-job.org history + `scrape_runs`)
 - 2–3 tracked products visible on the live dashboard
-
-## 8. Sources
-
-Official/current technical sources used for this research:
-
-- Express middleware: https://expressjs.com/en/guide/using-middleware.html
-- Express error handling: https://expressjs.com/en/guide/error-handling.html
-- Express routing: https://expressjs.com/en/guide/routing.html
-- Playwright locators: https://playwright.dev/docs/locators
-- Render service types: https://render.com/docs/service-types
-- Render Cron Jobs: https://render.com/docs/cronjobs
-- Supabase RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
-- OpenAPI Specification: https://swagger.io/specification/
-- Vercel docs: https://vercel.com/docs
-- React docs: https://react.dev/
-- Vite guide: https://vite.dev/guide/
+- catalog sync reporting 960/960

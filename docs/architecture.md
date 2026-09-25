@@ -2,63 +2,83 @@
 
 ## 1. Architecture Summary
 
-The proposed system is a small modular monolith:
+The system is a small modular monolith:
 
-- React + Vite frontend deployed on Vercel
-- Node.js + Express backend deployed on Render
-- Supabase PostgreSQL for persistence
-- cron-job.org (or equivalent external scheduler) triggering the backend every 2 hours
-- HTTP fetch + Cheerio-style HTML parsing as the first scraping strategy
-- Playwright as the fallback for pages that genuinely require browser rendering
+- Next.js 16 frontend (React 19, App Router) deployed on Vercel
+- Node.js + Express backend deployed on Render (free web service)
+- Supabase PostgreSQL for persistence, accessed server-side through the Supabase pooler
+- cron-job.org triggering the backend every 2 hours
+- **Plain HTTP against the store's JSON API** for catalog search and product options
+- **Playwright** for price and stock, because the store only reveals them after a browser-side challenge (see §5.1)
 
-The architecture deliberately keeps the scraper inside the backend codebase but separates it into independent modules. This minimizes deployment and coordination overhead for a time-boxed assignment while preserving clean boundaries.
+The scraper lives inside the backend codebase but is split into independent modules. This keeps deployment simple for a time-boxed assignment while preserving clean boundaries.
 
 ## 2. High-Level Diagram
 
 ```mermaid
 flowchart TB
     U[User Browser]
-    V[Vercel - React Frontend]
+    V[Vercel - Next.js Frontend]
     A[Render - Express API]
-    S[External Scheduler\ncron-job.org or equivalent]
+    S[cron-job.org\nevery 2 hours]
     D[(Supabase PostgreSQL)]
-    HTTP[HTTP Fetcher]
-    PARSER[HTML Parser / Extractor]
-    PW[Playwright Browser]
+    CAT[Catalog Client\nHTTP JSON]
+    PW[Price Scraper\nPlaywright]
     STORE[(Mock Storefront\ndemo.inelabteamdev.com)]
 
     U --> V
     V -->|HTTPS REST| A
-    A -->|Read/write| D
-    S -->|Authenticated trigger| A
-    A --> HTTP
-    HTTP --> STORE
-    HTTP --> PARSER
-    PARSER -->|Validation failure / JS required| PW
-    PW --> STORE
+    A -->|Read/write via pooler| D
+    S -->|POST + bearer secret| A
+    A --> CAT
+    CAT -->|/api/v2/listings, /api/v2/items/:id| STORE
+    A --> PW
+    PW -->|/item/:id + hover challenge| STORE
     A -->|Persist attempts + observations| D
 ```
 
 ## 3. Runtime Workflows
 
-### 3.1 Product Search
+### 3.1 Catalog Sync and Product Search
+
+The store has no working server-side search (`q` is ignored), and `/api/v2/listings` returns products in a **different random order on every request**. Paging through all pages once returned only 617 of 960 products. Searching by paging live would silently miss products.
+
+Therefore search runs against a local catalog cache:
 
 ```mermaid
 sequenceDiagram
-    participant Browser
     participant API
     participant Store
+    participant DB
 
+    Note over API: Catalog sync (on startup if empty, then on demand / daily)
+    loop Until unique ids == count (bounded passes)
+        API->>Store: GET /api/v2/listings?page=N&limit=60
+        Store-->>API: results + count
+        API->>API: Dedupe by id
+    end
+    API->>DB: Upsert catalog_products
+
+    participant Browser
     Browser->>API: GET /api/products/search?q=...
-    API->>Store: Fetch search/listing page
-    Store-->>API: HTML
-    API->>API: Parse product cards
+    API->>DB: ILIKE match on name/brand
+    DB-->>API: Rows
     API-->>Browser: Product summaries
 ```
 
-Design note: search can be implemented as backend scraping or against a small synchronized catalog if the target storefront supports stable product discovery. Do not make the frontend scrape the storefront directly.
+The sync repeats full passes until the set of unique IDs reaches the reported `count` or a pass limit is hit. It records whether the catalog is complete. Search results come from the database, so search is fast and does not depend on the store's availability.
 
-### 3.2 Track Product
+### 3.2 Product Detail and Option Selection
+
+```text
+GET /api/products/:storeProductId
+   → HTTP GET /api/v2/items/:id
+   → { id, name, brand, category, sku, specs, optionAxis, options: [{ id, label }] }
+```
+
+The option `id` (e.g. `o1`) is the stable option key. The `label` (e.g. `Oak`) is shown to the user.
+
+### 3.3 Track Product
 
 ```mermaid
 sequenceDiagram
@@ -67,47 +87,43 @@ sequenceDiagram
     participant DB
 
     Browser->>API: POST /api/tracked-products
-    API->>API: Validate product URL, product ID, option
-    API->>DB: Insert tracking target
-    API->>DB: Create scrape run / invoke initial scrape
-    DB-->>API: Created record
-    API-->>Browser: Tracking target
+    API->>API: Validate product id + option id against /api/v2/items/:id
+    API->>DB: Insert (or reactivate) tracking target
+    API-->>Browser: 201 Tracking target
+    API->>API: Queue initial scrape (background)
 ```
 
-Recommended behavior: return the created tracking record quickly and perform the initial scrape through a background-safe mechanism when practical. For the assignment scale, a synchronous initial scrape is acceptable if request timeout limits are respected, but the scheduled path must remain independently executable.
+The initial scrape runs in the background so the request does not wait on Playwright.
 
-### 3.3 Scheduled Scrape Batch
+### 3.4 Scheduled Scrape Batch
 
 ```mermaid
 sequenceDiagram
-    participant Cron as External Scheduler
+    participant Cron as cron-job.org
     participant API as Render API
     participant DB as Supabase
     participant Scraper
     participant Store as Mock Store
 
     Cron->>API: POST /api/scrape/run + secret
-    API->>DB: Acquire batch/run lock
+    API->>DB: Insert scrape_runs(run_key = 2h slot) ON CONFLICT DO NOTHING
+    API-->>Cron: 202 Accepted (or 200 "already ran" for duplicate slot)
     API->>DB: Read active tracking targets
-    loop Each tracked target
-        API->>DB: Create scrape run/attempt
-        API->>Scraper: Scrape target
-        Scraper->>Store: HTTP request / browser navigation
-        Store-->>Scraper: Response/page
-        alt Valid extraction
-            Scraper-->>API: Valid price + stock
-            API->>DB: Store success observation
-            API->>DB: Mark attempt success
-        else Recoverable failure
-            Scraper-->>API: Retryable error
-            API->>DB: Log retried attempt
-            Scraper->>Store: Retry request
-        else Final failure
-            Scraper-->>API: Failure
-            API->>DB: Log failed attempt
+    API->>Scraper: Launch one Chromium
+    loop Each tracked target (sequential)
+        loop attempt 1..3
+            Scraper->>Store: Open /item/:id, select option, hover, wait
+            alt Valid extraction
+                API->>DB: TX: attempt=success + observation + current state
+            else Transient failure, attempts remain
+                API->>DB: attempt=retried
+            else Final or permanent failure
+                API->>DB: attempt=failed, bump consecutive_failures
+            end
         end
     end
-    API-->>Cron: Summary
+    Scraper->>Scraper: Close browser (finally)
+    API->>DB: Finish scrape_runs with counts/status
 ```
 
 ## 4. Service Boundaries
@@ -117,17 +133,16 @@ sequenceDiagram
 Responsibilities:
 
 - Search UX
-- Product/variant selection
+- Product/option selection
 - Tracking list
 - History chart/table
 - Scrape logs
 - CSV export action
-- Manual scrape/demo controls if exposed
 
 Do not:
 
-- Store Supabase service-role credentials
-- Scrape the storefront directly
+- Store database or Supabase service credentials
+- Call the storefront directly
 - Decide whether a price is valid
 
 ### Backend API
@@ -144,23 +159,25 @@ Responsibilities:
 - Data integrity rules
 - Error normalization
 
-### Scraper Module
+### Store Client Module (HTTP)
 
-Responsibilities:
+- Listings pagination + catalog sync
+- Product detail/options
+- UI manifest fetch (current CSS class names)
+- Timeouts, retry on 429/5xx
 
-- HTTP request execution
-- Browser execution when necessary
+### Price Scraper Module (Playwright)
+
+- Browser lifecycle
 - Product-page navigation
-- Variant selection
-- Price extraction
-- Stock extraction
+- Option selection
+- Human-like hover to satisfy the price challenge
+- Price/stock extraction via manifest classes
 - Validation
 - Retry classification
-- Scraper diagnostics
+- Diagnostics (screenshot/DOM snapshot on failure, locally)
 
 ### Persistence Module
-
-Responsibilities:
 
 - Transactions
 - Inserts/updates
@@ -170,132 +187,134 @@ Responsibilities:
 
 ## 5. Scraper Design
 
-### 5.1 Strategy
+### 5.1 Why a Browser Is Required for Price and Stock
 
-Use a layered strategy:
+Verified by inspecting the store (see `research.md`):
 
-1. HTTP request.
-2. Parse HTML.
-3. Validate required product identity, option, price, stock.
-4. If required content is absent because it is rendered client-side, use Playwright.
-5. If extraction is still invalid, fail the attempt honestly.
+1. `/` and `/item/:id` return an empty SPA shell, so there is nothing to parse.
+2. `/api/v2/items/:id` returns name, specs, reviews and options, but **no price or stock**.
+3. The price is fetched by the page's own JavaScript only after:
+   - a proof-of-work challenge computed in the browser,
+   - mouse-hover telemetry over the price panel (a minimum number of moves and a minimum dwell time, recorded from trusted input events),
+   - exchanging that for a short-lived token and fetching an encoded price payload.
+4. Until then the page shows "Hover over the price area to load the current price." or "Hold on — checking availability…".
 
-### 5.2 Do Not Use Arbitrary Sleeps
+Reproducing steps 3a–c over plain HTTP would mean reverse-engineering obfuscated code that can change at any time. Driving a real browser and letting the page do its own work is more robust and matches the brief's "headless browser only where the page genuinely requires it".
 
-Prefer event- or condition-based waits:
+### 5.2 Strategy
 
-- element becomes visible
-- expected text appears
-- DOM reaches a known state
-- response/network condition completes
+| Data | Method | Why |
+|---|---|---|
+| Catalog / search | HTTP JSON (`/api/v2/listings`) → DB cache | Cheap and complete, with no browser needed |
+| Product options | HTTP JSON (`/api/v2/items/:id`) | Stable ids/labels |
+| CSS class map | HTTP JSON (`/api/v2/ui/manifest`) | Needed to locate price/stock in the DOM |
+| Price + stock | Playwright | Gated behind browser challenge + hover |
 
-Playwright locators are designed around auto-waiting/retry behavior, which is preferable to large fixed sleeps when browser automation is required. [Playwright locators](https://playwright.dev/docs/locators)
+### 5.3 Price Extraction Procedure (Playwright)
 
-### 5.3 Retry Policy
+1. Fetch `/api/v2/ui/manifest` → `classes.priceValue`, `classes.stock`, `classes.priceWrap`, `classes.sale`, `classes.mrp`, `priceTag`, `priceCarrier`, `revision`.
+2. Open `/item/:id`; wait for the product name to match the tracked name.
+3. Select the tracked option (by label, then confirm it is the active option).
+4. Move the mouse into the price panel (`.offer-panel`) with several `page.mouse.move` steps, then hold for the dwell period.
+5. Wait for the price element `<priceTag>.<priceValue>` to be visible **and** not pending (the page dims the price to `opacity: 0.45` while loading).
+6. Read `innerText` of the visible price element. **Never** read the hidden `.price-value` span, which is a decoy.
+7. Normalize: strip zero-width spaces (`​`), NBSP, currency symbol and Indian digit grouping (`1,29,999.00` → `129999.00`).
+8. Read the stock element: a count pill (`avail-yes`) or `Sold out` (`avail-no`) → integer quantity (0 = sold out).
+9. Validate (§5.6). If valid, return a structured result.
 
-Proposed defaults:
+Use locator auto-waiting and explicit conditions, not fixed sleeps. The only intentional delay is the hover dwell the page itself requires. [Playwright locators](https://playwright.dev/docs/locators)
 
-| Parameter | Proposed value |
+### 5.4 Which Price Is Tracked
+
+The page may show MRP (struck-through), a sale price, and a member price. The tracked price is **the main displayed price (`priceValue`)**, i.e. what a normal customer pays. MRP is stored as extra info when available. Member price is ignored.
+
+### 5.5 Retry Policy
+
+| Parameter | Value |
 |---|---:|
-| Max attempts | 3 |
-| Initial delay | 1 second |
-| Backoff | exponential |
-| Jitter | yes |
-| Request timeout | 10–15 seconds HTTP; browser navigation/action timeouts separately |
-| Retry on | network error, timeout, 408, 429, 5xx, temporary browser navigation failure |
-| Do not retry | invalid selector result, product not found, option not found, malformed extraction |
+| Max attempts per target per run | 3 |
+| Backoff | exponential, 2 s base, with jitter |
+| HTTP timeout | 15 s |
+| Browser navigation timeout | 30 s |
+| Price-ready timeout | 20 s |
 
-These values are project decisions and should be tuned after observing the mock store.
+| Classification | Examples | Action |
+|---|---|---|
+| Transient | network error, timeout, HTTP 408/429/5xx, challenge never completes, price never appears, hover dropped | retry |
+| Page shifted | price/stock locator not found, manifest revision changed mid-run | retry with fresh page **and** fresh manifest; log `error_code=STRUCTURE_CHANGED` |
+| Permanent | product 404, tracked option no longer offered, name mismatch | fail immediately |
 
-### 5.4 Extraction Validation
+Selector misses are retried because on this store they are usually temporary (late content, dropped hover events, rotating classes). The brief asks the scraper to "recover when … a page shifts". If a miss persists across all attempts, the attempt is logged as `failed` with `STRUCTURE_CHANGED`, which feeds the structure-change bonus.
 
-A scrape result is valid only if all required fields pass checks:
+### 5.6 Extraction Validation
+
+A result is valid only if all checks pass:
 
 ```text
-product id matches tracked target
-AND product name is non-empty
-AND selected option is identified
-AND price is numeric and >= 0
-AND stock is one of the supported normalized states
+product name on page matches tracked product
+AND active option label == tracked option label
+AND price element is visible and not pending
+AND price source is not the hidden decoy element
+AND normalized price is a finite number > 0
+AND stock is an integer >= 0
 ```
 
-If any required check fails, no successful history record is written.
+If any check fails, no successful history row is written.
 
-### 5.5 Stock Normalization
+### 5.7 Stock and Price Normalization
 
-Use a normalized representation:
-
-- `in_stock`
-- `out_of_stock`
-- `unknown`
-
-The raw stock text may also be stored in the scrape attempt for diagnostics.
-
-### 5.6 Price Normalization
-
-Persist price as a PostgreSQL `numeric(12,2)` value when the store returns a monetary decimal. Never store formatted currency strings in the primary price column.
+- `stock_qty` integer (0 = sold out). `stock_status` is derived (`in_stock` / `out_of_stock`) for display.
+- Price stored as `numeric(12,2)` plus `currency` (from the page, expected `INR`). Never store formatted strings in the price column.
+- Raw price and stock text are kept on the attempt row for diagnostics.
 
 ## 6. Failure Isolation
 
-Pseudo-code:
-
 ```js
-for (const target of activeTargets) {
-  try {
-    await scrapeOneTarget(target);
-  } catch (error) {
-    await recordFinalFailure(target, error);
+const browser = await chromium.launch({ headless: !headed });
+try {
+  for (const target of activeTargets) {
+    try {
+      await scrapeWithRetries(browser, target, run);
+    } catch (error) {
+      await recordFinalFailure(target, run, error);
+    }
   }
+} finally {
+  await browser.close();
 }
 ```
 
-One target's failure must not abort the batch.
+One target's failure must not abort the batch. Each target gets a fresh browser context, so state (cookies, tokens) does not leak between targets.
 
 ## 7. Scheduler and Free-Tier Behavior
 
-The assignment explicitly requires an external cron service or scheduled function because free-tier backends may sleep. cron-job.org is the simplest assignment-aligned option.
-
-An alternative is a Render Cron Job. Render currently supports cron jobs as a service type and exposes run history/logs, but this may introduce deployment/billing considerations. [Render Cron Jobs](https://render.com/docs/cronjobs)
-
-Recommended assignment implementation:
-
 ```text
-cron-job.org
-   ↓ every 2 hours
-POST /api/scrape/run
+cron-job.org  (every 2 hours, POST + bearer secret)
    ↓
-Render Web Service
-   ↓
-Supabase + scraper
+Render Web Service  (may cold-start ~50 s)
+   ↓ 202 Accepted immediately
+background batch → Playwright → Supabase
 ```
 
-The endpoint must be protected by a scheduler secret.
+Constraints that shape this:
+
+- **cron-job.org timeout (~30 s):** the endpoint must not wait for the batch, so it responds `202` and runs in the background.
+- **Render free sleeps after ~15 min idle:** the incoming cron request wakes it, and background work finishes well within the active window.
+- **512 MB RAM:** one Chromium, sequential targets, new context per target, browser always closed in `finally`. Block images/fonts to save memory.
+- **Supabase direct connection is IPv6-only; Render has no outbound IPv6:** connect via the Supabase **session pooler** string.
+
+Alternative considered: Render Cron Job (a separate service type, not part of the free plan) or GitHub Actions `schedule` (can be delayed/skipped under load). cron-job.org is the assignment's suggested option. [Render Cron Jobs](https://render.com/docs/cronjobs)
 
 ## 8. Concurrency / Idempotency
 
-A scheduled trigger can be retried by the scheduler or manually invoked. The system therefore needs a logical run identity.
-
-Recommended fields:
-
-- `run_id`
-- `target_id`
-- `attempt_number`
-- `started_at`
-- `finished_at`
-
-Recommended protection:
-
-- Acquire an application-level run lock before batch execution.
-- Do not create a second successful observation for the same target and logical run.
-- Use database uniqueness constraints where practical.
-
-At assignment scale, a PostgreSQL advisory lock or a short-lived database lock can be considered. Keep the implementation small and documented.
+- `run_key` = trigger source + 2-hour UTC slot, e.g. `cron-2026-09-25T10`. `UNIQUE(run_key)` means a duplicate cron call for the same slot is a no-op.
+- Manual/demo runs use `manual-<uuid>` and are always allowed.
+- An in-process flag prevents two batches running at once in the same instance. A PostgreSQL advisory lock (`pg_try_advisory_lock`) guards across instances.
+- `UNIQUE(tracked_product_id, run_id, attempt_number)` prevents duplicate attempt rows.
 
 ## 9. API Error Handling
 
-Express supports middleware-based error handling and asynchronous handler error propagation. Use a central error middleware after the route stack. [Express error handling](https://expressjs.com/en/guide/error-handling.html)
-
-Recommended error shape:
+Express 5 forwards rejected promises from async handlers to error middleware. Use one central error middleware after the routes. [Express error handling](https://expressjs.com/en/guide/error-handling.html)
 
 ```json
 {
@@ -313,85 +332,79 @@ Do not return stack traces to public clients.
 
 ### Vercel
 
-- Build frontend
-- Configure `VITE_API_BASE_URL` or equivalent public API URL
-- No database service keys in frontend environment
+- Next.js project, root directory `frontend/`
+- `NEXT_PUBLIC_API_BASE_URL` → Render API URL
+- No database credentials in frontend environment
 
 ### Render
 
-- Node.js Express service
+- Web service, root directory `backend/`
+- Build: `npm install && npx playwright install --with-deps chromium`
 - `PORT` supplied by platform
-- `SUPABASE_DATABASE_URL` or Supabase connection configuration
-- `SCRAPE_TRIGGER_SECRET`
-- Playwright browser dependencies installed as part of deployment if browser mode is used
+- `DATABASE_URL` (Supabase session pooler), `SCRAPE_TRIGGER_SECRET`, `FRONTEND_ORIGIN`, timeouts
 
 ### Supabase
 
-- PostgreSQL schema
-- Tables from `DATABASE.md`
-- Server-side credentials only
-- Enable database security controls appropriate to the chosen access model
+- Schema from `backend/db/schema.sql`
+- Server-side access only (no browser → Supabase access)
+- RLS enabled with no public policies, so the anon key has no access even if leaked
 
 ## 11. Repository Structure
 
 ```text
 price-tracker/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── lib/
-│   │   └── api/
-│   ├── public/
+├── frontend/                     Next.js 16 (App Router, JS, Tailwind 4)
+│   ├── app/
+│   │   ├── layout.js
+│   │   ├── page.js               dashboard
+│   │   └── products/[id]/page.js tracked product detail (history + log)
+│   ├── components/
+│   ├── lib/api.js                fetch wrapper using NEXT_PUBLIC_API_BASE_URL
 │   └── package.json
 ├── backend/
 │   ├── src/
 │   │   ├── app.js
 │   │   ├── server.js
 │   │   ├── routes/
-│   │   ├── controllers/
 │   │   ├── services/
+│   │   ├── store/                HTTP client: listings, items, manifest, catalog sync
 │   │   ├── scraper/
-│   │   │   ├── httpFetcher.js
-│   │   │   ├── browserFetcher.js
-│   │   │   ├── parser.js
-│   │   │   ├── validators.js
+│   │   │   ├── browser.js        launch/context lifecycle
+│   │   │   ├── priceScraper.js   navigate, select option, hover, read
+│   │   │   ├── normalize.js      price/stock text → numbers
+│   │   │   ├── validate.js
+│   │   │   ├── classify.js       transient / structure / permanent
 │   │   │   └── retry.js
 │   │   ├── db/
 │   │   ├── middleware/
-│   │   └── utils/
+│   │   └── cli/scrapeHeaded.js   local headed run
+│   ├── db/schema.sql
 │   ├── tests/
 │   └── package.json
 ├── fixtures/
-│   ├── product-page-success.html
-│   ├── product-page-missing-price.html
-│   └── product-page-dynamic.html
+│   ├── manifest-*.json
+│   ├── item-*.json
+│   └── product-dom-*.html        rendered DOM snapshots (after price load)
 ├── docs/
-│   ├── PRD.md
-│   ├── ARCHITECTURE.md
-│   ├── API.md
-│   ├── DATABASE.md
-│   ├── DECISION.md
-│   ├── TASK.md
-│   └── RESEARCH.md
 └── README.md
 ```
 
 ## 12. Testing Architecture
 
 ```text
-Parser unit tests
+normalize/validate unit tests (fixtures: split prices, INR grouping, sold out, decoy)
     ↓
-Scraper service tests
+classifier + retry tests
+    ↓
+catalog sync tests (shuffled pages, dedupe, completeness)
     ↓
 API integration tests
     ↓
-Database integration tests
+Database integration tests (success TX, failure leaves current state)
     ↓
-Production smoke test
+Live smoke test against the store
     ↓
 Manual headed-run demonstration
 ```
 
-Fixtures are important because selector/page parsing bugs should be testable without repeatedly hitting the live target store.
+Fixtures let parser bugs be tested without repeatedly hitting the live store.

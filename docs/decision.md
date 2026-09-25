@@ -1,113 +1,183 @@
 # Engineering Decision Log / Design Note
 
-## Decision 001 — React + Vite for frontend
+## Design Note
 
-**Decision:** Use React.js with Vite.
+*The brief asks for a short note on how the scraping was made reliable, what trade-offs were made, and what AI tools got wrong on the first attempt. Keep this section updated with real results before submission.*
 
-**Why:** The assignment allows React.js or Vue.js. React + Vite keeps the frontend straightforward and matches the team's likely JavaScript ecosystem without adding a large framework requirement.
+### How the scraping is made reliable
 
-**Trade-off:** Another contributor could prefer Vue; no major technical requirement depends on framework choice.
+- **Right tool per data type.** Catalog and options come from the store's JSON API over plain HTTP. Price and stock need a browser, because the store gates them behind a proof-of-work challenge and hover telemetry, so only that part uses Playwright.
+- **Complete search despite a shuffled catalog.** The listing API returns a different random order per request. The catalog is synced into Postgres with repeated passes until every ID is collected, and search runs against that cache.
+- **No hard-coded volatile selectors.** Class names are read from `/api/v2/ui/manifest` on every run. The hidden decoy `.price-value` is never read.
+- **Wait for the real state, not a fixed time.** The scraper waits for the price to be visible, not pending (dimmed), and for the correct option to be active.
+- **Bounded retries with classification.** Transient failures and page shifts are retried up to 3 times with jittered backoff. Permanent failures fail immediately.
+- **Fail closed.** Anything that doesn't pass validation is a failure. The database CHECK constraint makes it impossible to store a price on a non-success attempt.
+- **Honest log.** Every attempt is a row (`success` / `retried` / `failed`), with an error code and the manifest revision.
+- **Free-tier safe scheduling.** cron-job.org → `202` + background batch. The 2-hour-slot `run_key` makes duplicate triggers harmless.
+
+### Trade-offs
+
+- Playwright on Render free (512 MB) is heavier and slower than HTTP, but reverse-engineering the obfuscated challenge would break whenever the store changes it.
+- The catalog cache can be slightly stale. Product detail and options are always fetched live before tracking.
+- Per-attempt logging makes the log grow ~3× faster in bad periods, but it shows exactly what happened.
+- Sequential scraping is slow but predictable in memory; fine for a handful of targets.
+
+### What the AI tools got wrong on the first attempt, and the fix
+
+| First attempt (AI-generated docs) | What inspection showed | Correction |
+|---|---|---|
+| "HTTP fetch + HTML parsing first, Playwright as fallback" | Pages are an empty SPA shell. Price isn't in HTML or the JSON API; it needs a browser challenge + hover | Hybrid: JSON API for catalog/options, Playwright as the **primary** path for price/stock |
+| Search by scraping a search/listing page | No search param, and listing order is random per request (one full crawl got 617/960) | Sync catalog to Postgres with completeness check; search the cache |
+| Example product URL `/products/123` | Real route is `/item/:id` | Product ID = numeric `id` from `/item/<id>` |
+| Stock as `in_stock` / `out_of_stock` / `unknown` | Store shows a unit count | Store `stock_qty` integer; status derived |
+| "Don't retry selector misses / malformed extraction" | Misses are mostly transient here (late content, dropped hover events, rotating classes), and the brief says to recover when a page shifts | Retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if persistent |
+| Frontend documented as React + Vite (`VITE_API_BASE_URL`) | Repo uses Next.js 16 | Docs switched to Next.js, `NEXT_PUBLIC_API_BASE_URL` |
+| `SUPABASE_DATABASE_URL` direct connection | Supabase direct connection is IPv6-only; Render can't reach it | Use the session pooler connection string |
+| Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch |
+
+*(Add implementation-time mistakes here as they happen, e.g. wrong selector choice, reading the decoy, stale price after option change.)*
+
+---
+
+## Decision 001 — Next.js (React) for frontend
+
+**Decision:** Use Next.js 16 (React 19, App Router, JavaScript, Tailwind CSS 4), already scaffolded in `frontend/`.
+
+**Why:** The assignment allows React.js. Next.js is React and deploys to Vercel with zero configuration. Pages mostly render client-side from the Express API.
+
+**Trade-off:** Next.js 16 has breaking changes from older versions; check `frontend/node_modules/next/dist/docs/` before using APIs (see `frontend/AGENTS.md`). No Next.js API routes are used for backend logic. The backend stays on Render as required.
 
 ## Decision 002 — Node.js + Express for backend
 
-**Decision:** Use Node.js + Express with ES Modules.
+**Decision:** Use Node.js + Express 5 with ES Modules.
 
-**Why:** The assignment permits Node.js/Express or Django. A JavaScript backend aligns with a JavaScript frontend and allows scraper code, Playwright, API routes, and shared validation patterns to live in one language.
+**Why:** One language across frontend, API and Playwright scraper. Express 5 forwards async handler errors to error middleware natively.
 
-**Trade-off:** Django has stronger batteries-included conventions, but the assignment's small scope does not require them.
+**Trade-off:** Django has more built in, but the small scope doesn't need it.
 
 ## Decision 003 — Modular monolith instead of microservices
 
-**Decision:** Keep API, scrape orchestration, scraper adapters, and persistence in one deployable backend, with clear internal modules.
+**Decision:** Keep API, scrape orchestration, scraper and persistence in one deployable backend with clear internal modules.
 
-**Why:** The workload is small and the assignment is time-boxed. A microservice split would add network calls, deployment complexity, failure modes, and operational overhead without a demonstrated need.
+**Why:** Small workload, time-boxed assignment. A separate scraper service adds deployment and failure modes without benefit.
 
-**Trade-off:** All backend concerns share one deployment. This is acceptable for the assignment scale.
+**Trade-off:** API and scraper share the 512 MB instance, so scrape batches run sequentially.
 
-## Decision 004 — HTTP + HTML parsing before Playwright
+## Decision 004 — HTTP for catalog/options, Playwright for price/stock
 
-**Decision:** Attempt lightweight HTTP fetching and HTML parsing first; use Playwright only for content that genuinely requires browser rendering.
+**Decision:** Use the store's JSON API (`/api/v2/listings`, `/api/v2/items/:id`, `/api/v2/ui/manifest`) over plain HTTP wherever it has the data. Use Playwright only to read price and stock.
 
-**Why:** This directly follows the assignment's preferred approach and reduces browser startup/runtime cost. Playwright remains available as a controlled fallback for JavaScript-rendered pages.
+**Why:** Verified during inspection: price/stock are not in any plain API response. They load only after a browser proof-of-work challenge plus trusted mouse-hover telemetry. This is exactly the "page genuinely requires it" case in the brief. Everything else stays lightweight.
 
-**Trade-off:** Maintaining two extraction paths increases code complexity, but it improves reliability and makes the lightweight path fast when it works.
+**Rejected:** Reverse-engineering the challenge to call the price endpoint over HTTP. The code is obfuscated and deliberately anti-automation. Replicating it would be fragile and would effectively forge human telemetry.
 
-## Decision 005 — External scheduler
+## Decision 005 — External scheduler with async trigger
 
-**Decision:** Use cron-job.org (or equivalent external scheduler) to trigger the backend every 2 hours.
+**Decision:** cron-job.org calls `POST /api/scrape/run` every 2 hours with a bearer secret. The endpoint returns `202` and runs the batch in the background.
 
-**Why:** The assignment explicitly calls for external scheduling because free-tier backends may sleep.
+**Why:** Free Render instances sleep, and cron-job.org times out long requests.
 
-**Trade-off:** The scheduler becomes an external dependency. Protect the trigger endpoint with a shared secret and make the run idempotent.
+**Trade-off:** External dependency. Mitigated by the secret, idempotent `run_key`, and the visible run history.
 
-## Decision 006 — Keep current state separate from history
+## Decision 006 — Local catalog cache for search
 
-**Decision:** Store the latest successful price/stock on `tracked_products` and all valid historical observations in `price_observations`.
+**Decision:** Sync all listings into `catalog_products` and search with `ILIKE`.
 
-**Why:** Dashboard reads become simple and fast, while historical data stays append-oriented.
+**Why:** No server-side search, and listing order is random per request, so live paging misses products.
 
-**Trade-off:** There is duplicated state, so success updates should occur in a transaction.
+**Trade-off:** Cache can be stale. Mitigated by sync on startup when empty, a protected sync endpoint, and live detail fetch before tracking.
 
-## Decision 007 — Failed scrape never overwrites last known successful value
+## Decision 007 — Keep current state separate from history
 
-**Decision:** A failure updates attempt metadata but does not overwrite the latest successful price/stock.
+**Decision:** Latest successful price/stock on `tracked_products`, all valid observations in `price_observations`.
 
-**Why:** The assignment explicitly says failed attempts must be included with price/stock empty. Keeping last known successful state separate prevents a temporary outage from looking like a product price of “null”.
+**Why:** Simple dashboard reads, append-only history.
 
-## Decision 008 — One row per scrape attempt
+**Trade-off:** Duplicated state, so success updates run in one transaction.
 
-**Decision:** Record every actual attempt, including retry attempts.
+## Decision 008 — Failed scrape never overwrites last known successful value
 
-**Why:** This produces an honest audit trail and allows reviewers to see retry behavior.
+**Decision:** Failures update attempt metadata only.
 
-**Trade-off:** The log grows faster than a one-row-per-run design, but the assignment explicitly values honest logging.
+**Why:** The CSV shows failed attempts with blank price/stock, while the dashboard still shows the last known good value, clearly labelled with its time.
 
-## Decision 009 — Retry only transient/recoverable failures
+## Decision 009 — One row per scrape attempt
 
-**Decision:** Retry timeouts, network failures, rate limiting, and temporary 5xx responses; do not blindly retry parser mismatches or “product not found”.
+**Decision:** Record every attempt; `retried` = an attempt that failed and was followed by another.
 
-**Why:** Retrying a broken selector three times does not fix the underlying problem and can hide scraper regressions.
+**Why:** An honest audit trail that shows retry behavior to the reviewer.
 
-## Decision 010 — Validate before persistence
+**Trade-off:** More rows than one-per-run.
 
-**Decision:** The scraper returns a typed/structured result only after product identity, option, price, and stock checks pass.
+## Decision 010 — Retry transient failures and page shifts, not permanent ones
 
-**Why:** The evaluator prioritizes correctness and explicitly rejects incorrect/empty success data.
+**Decision:** Retry timeouts, network errors, 408/429/5xx, challenge not completing, price not appearing, and locator misses (with fresh page + fresh manifest). Don't retry product 404 or option no longer offered.
 
-## Decision 011 — Fixtures for parser tests
+**Why:** On this store, a locator miss is usually temporary, and the brief requires recovery when the page shifts. A miss that persists across all attempts is logged as `STRUCTURE_CHANGED`, not guessed around.
 
-**Decision:** Save representative storefront HTML/DOM fixtures for parser tests.
+## Decision 011 — Validate before persistence
 
-**Why:** It makes parser behavior deterministic and allows regression testing without depending on the live store for every unit test.
+**Decision:** A result is accepted only if product name, active option, visible and non-pending price, not the decoy, price > 0, and stock ≥ 0 all pass. A DB CHECK constraint also blocks price/stock on non-success rows.
 
-## Decision 012 — No arbitrary long sleeps
+**Why:** The worst failure is a wrong price recorded as success.
 
-**Decision:** Prefer explicit browser waits or HTTP readiness conditions.
+## Decision 012 — Track the main displayed price
 
-**Why:** Fixed sleeps increase run time and remain unreliable when the target's latency varies.
+**Decision:** Track the primary price element (`priceValue`), store MRP separately, ignore member price.
 
-## Decision 013 — Soft deactivate tracked products
+**Why:** The page shows up to three prices. The one a normal customer pays is the meaningful one to track.
 
-**Decision:** Deleting a tracked product means `active=false` rather than physically deleting its history.
+## Decision 013 — Manifest-driven selectors
 
-**Why:** History and logs remain available for the dashboard and export.
+**Decision:** Read CSS class names from `/api/v2/ui/manifest` each run and record its `revision` on every attempt.
 
-## Decision 014 — Scheduler endpoint is internal/admin-like
+**Why:** Class names rotate between revisions. Hard-coded classes would break silently.
 
-**Decision:** No public UI secret is used. The scheduled scrape endpoint requires a server-side secret.
+## Decision 014 — Fixtures for parser tests
 
-**Why:** Anyone who can trigger the route could increase load on the storefront or create duplicate runs.
+**Decision:** Save manifest/item JSON and rendered DOM snapshots (after the price loads) as fixtures.
 
-## Open Decisions After Target-Site Inspection
+**Why:** Deterministic normalization/validation tests without hitting the live store.
 
-The following must be confirmed by inspecting the provided mock store and should not be invented before verification:
+## Decision 015 — No arbitrary long sleeps
 
-1. Exact product listing/search URL.
-2. Exact product page URL shape.
-3. How product IDs are encoded in URLs.
-4. Exact option/variant selectors.
-5. Exact price element/JSON source.
-6. Exact stock representation.
-7. Whether price or stock is loaded after initial HTML.
-8. Whether an API/XHR request is responsible for dynamic data.
-9. Which failures are reproducibly simulated by the storefront.
+**Decision:** Use condition-based waits. The only deliberate wait is the hover dwell the page requires.
+
+**Why:** Fixed sleeps are slow and still unreliable under variable latency.
+
+## Decision 016 — Soft deactivate tracked products
+
+**Decision:** Delete = `active=false`. Re-tracking the same product+option reactivates the row. There is a unique index over active rows only.
+
+**Why:** History stays available for the dashboard and export.
+
+## Decision 017 — Protected scrape endpoints
+
+**Decision:** Scheduler, manual scrape and catalog sync require a bearer secret. Headed runs are local CLI only.
+
+**Why:** Prevents anyone from generating load on the store or duplicate runs. Render has no display for headed mode.
+
+## Decision 018 — Supabase via session pooler, server-side only
+
+**Decision:** The backend uses `pg` with the Supabase session pooler string. RLS is enabled with no public policies.
+
+**Why:** Render can't reach Supabase's IPv6-only direct host. `pg` gives real transactions. RLS closes the auto-generated public REST API.
+
+## Resolved by Target-Site Inspection (2026-09-25)
+
+| Question | Answer |
+|---|---|
+| Product listing/search URL | `/api/v2/listings?page=N&limit≤60` (JSON, random order, no search) |
+| Product page URL shape | `/item/:id` |
+| Product ID encoding | numeric `id` in the path |
+| Option structure | `optionAxis` + `options: [{ id: "o1", label: "Oak" }]` from `/api/v2/items/:id` |
+| Price source | browser-only, after challenge + hover; visible element uses manifest class `priceValue` |
+| Stock representation | unit count pill, or "Sold out" |
+| Loaded after initial HTML? | Everything (SPA); price additionally gated |
+
+## Still Open
+
+1. Exact option-selector interaction on the product page (buttons vs select), to confirm in headed mode.
+2. How often the manifest revision changes (per deploy, per time window, per request?).
+3. Which slow/error behaviors the store reproduces most often (for the demo).
+4. Real Chromium memory use on Render free with 3 targets.
