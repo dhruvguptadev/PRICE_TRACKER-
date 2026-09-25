@@ -17,6 +17,26 @@ The application allows a user to search for a product, select a specific option/
 
 The API runs on Render's free tier and sleeps when idle, so the first request after a quiet period can take up to a minute.
 
+## Screenshots
+
+Captured from the live deployment on 26 Sep 2026; all data shown is from real scrapes.
+
+**Landing page:** what the project does, with a sample of the real scrape log.
+
+![Landing page](docs/screenshots/landing.png)
+
+**Dashboard:** tracked options with current price, MRP, stock, last successful check, last attempt and consecutive failures.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+**Track a product:** search the synced catalogue (all 960 products), then pick the exact option. Options are loaded live from the store.
+
+![Search and option picker](docs/screenshots/search.png)
+
+**Product history:** price and stock charts (validated observations only) and the full scrape log, including a real `PRICE_NOT_READY` retry.
+
+![Product history and scrape log](docs/screenshots/product-history.png)
+
 ## Tech Stack
 
 | Layer | Technology |
