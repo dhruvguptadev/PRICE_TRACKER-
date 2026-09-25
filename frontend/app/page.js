@@ -3,7 +3,7 @@ import LiveStatus from '@/components/LiveStatus';
 import { exportCsvUrl } from '@/lib/api';
 
 export const metadata = {
-  title: 'Price Tracker: a scraper that keeps honest books',
+  title: { absolute: 'Nightwatch: a price scraper that keeps honest books' },
   description:
     'Tracks one product option on the INE mock storefront every two hours, and records every attempt, including the ones that fail.',
 };
@@ -52,7 +52,7 @@ export default function Landing() {
       <section className="relative isolate grid gap-12 pb-14 pt-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:pt-14">
         <div aria-hidden="true" className="bg-dots absolute inset-x-[-1rem] inset-y-0 -z-10 sm:inset-x-[-1.5rem]" />
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">Price &amp; stock tracker · INE mock storefront</p>
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">Nightwatch · price &amp; stock tracker for the INE mock storefront</p>
           <h1 className="mt-5 font-serif text-[2.9rem] leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.4rem]">
             Checks the price every two hours.
             <span className="block italic text-accent">Writes down every time it couldn’t.</span>
@@ -337,7 +337,7 @@ export default function Landing() {
 
       <footer className="flex flex-wrap items-baseline justify-between gap-4 border-t border-line pt-6 text-xs text-muted">
         <p>
-          Next.js on Vercel · Express, Playwright and Prisma on Render · Postgres on Supabase · triggered by cron-job.org.
+          <span className="font-medium text-ink-2">Nightwatch</span> · Next.js on Vercel · Express, Playwright and Prisma on Render · Postgres on Supabase · triggered by cron-job.org.
         </p>
         <p>
           Only ever scrapes <span className="font-mono">demo.inelabteamdev.com</span>, the store it was built for.

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import Logo from './Logo';
 
 const LINKS = [
   { href: '/', label: 'Overview', active: (p) => p === '/' },
@@ -21,14 +22,9 @@ export default function NavBar() {
     <header className="sticky top-0 z-40 border-b border-line bg-surface/80 backdrop-blur-md supports-[backdrop-filter]:bg-surface/70">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" onClick={close} className="flex items-center gap-2.5">
-          <span
-            aria-hidden="true"
-            className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-sm font-semibold text-accent-ink shadow-sm shadow-accent/30"
-          >
-            ₹
-          </span>
+          <Logo className="h-8 w-8 rounded-lg shadow-sm shadow-accent/30" />
           <span className="leading-tight">
-            <span className="block text-[0.95rem] font-semibold tracking-tight">Price Tracker</span>
+            <span className="block text-[0.95rem] font-semibold tracking-tight">Nightwatch</span>
             <span className="block text-[11px] text-muted">INE mock storefront</span>
           </span>
         </Link>

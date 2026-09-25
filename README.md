@@ -1,4 +1,6 @@
-# Mock Storefront — Product Search & Scheduled Price Tracker
+# Nightwatch
+
+**Mock Storefront — Product Search & Scheduled Price Tracker.** Checks the price every two hours. Writes down every time it couldn't.
 
 A full-stack price/stock tracker for the provided mock storefront:
 

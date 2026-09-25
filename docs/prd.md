@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Project | Mock Storefront — Product Search & Scheduled Price Tracker |
+| Project | Nightwatch (Mock Storefront — Product Search & Scheduled Price Tracker) |
 | Document | Product Requirements Document |
 | Status | Implementation Ready |
 | Deadline | September 27, 2026 — 1:00 PM IST |

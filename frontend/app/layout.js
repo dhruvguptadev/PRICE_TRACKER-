@@ -20,8 +20,9 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata = {
-  title: "Price Tracker",
-  description: "Scheduled price and stock tracking for the INE mock storefront.",
+  title: { default: "Nightwatch", template: "%s · Nightwatch" },
+  description: "Nightwatch checks product prices and stock on the INE mock storefront every two hours, and logs every attempt.",
+  applicationName: "Nightwatch",
 };
 
 export default function RootLayout({ children }) {
