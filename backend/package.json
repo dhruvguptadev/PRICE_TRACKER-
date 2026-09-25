@@ -1,20 +1,27 @@
 {
-  "name": "backend",
+  "name": "price-tracker-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "Express API + Playwright scraper for the mock storefront price tracker",
+  "main": "src/server.js",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "db:schema": "node src/cli/applySchema.js",
+    "catalog:sync": "node src/cli/syncCatalog.js",
+    "scrape:headed": "node src/cli/scrapeHeaded.js"
+  },
+  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "playwright": "^1.63.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

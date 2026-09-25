@@ -34,10 +34,10 @@ Build in vertical slices instead of completing the frontend first:
 - [x] Add root `.gitignore`.
 - [x] Add `README.md` at repo root.
 - [x] Add `docs/` documentation.
-- [ ] Add `backend/.env.example` and `frontend/.env.example`.
-- [ ] Fix `backend/package.json` entry point (`main`/`start` → `src/server.js`).
-- [ ] Add backend npm scripts: `dev`, `start`, `test`, `scrape:headed`.
-- [ ] Pin Node version (`"engines": { "node": ">=20" }`).
+- [x] Add `backend/.env.example` and `frontend/.env.example`.
+- [x] Fix `backend/package.json` entry point (`main`/`start` → `src/server.js`).
+- [x] Add backend npm scripts: `dev`, `start`, `test`, `scrape:headed`.
+- [x] Pin Node version (`"engines": { "node": ">=20" }`).
 
 ## 4. Phase 1 — Inspect the Mock Store ✅
 
@@ -49,88 +49,88 @@ Build in vertical slices instead of completing the frontend first:
 - [x] Identify price source: browser-only after challenge + hover.
 - [x] Identify stock: count pill / "Sold out".
 - [x] Inspect network/bundle: `/api/v2/listings`, `/api/v2/items/:id`, `/api/v2/ui/manifest`.
-- [ ] Confirm option-selection UI and hover behavior in a headed browser.
-- [ ] Save fixtures: manifest JSON, item JSON, rendered DOM snapshots (split price, sale price, sold out).
+- [x] Confirm option-selection UI and hover behavior in a headed browser.
+- [x] Save fixtures: manifest JSON, item JSON, rendered DOM snapshots (split price, sale price, sold out).
 
 ## 5. Phase 2 — Supabase Database
 
 - [ ] Create Supabase project.
-- [ ] Write `backend/db/schema.sql` from `database.md` §9 and run it.
+- [x] Write `backend/db/schema.sql` from `database.md` §9 and run it.
 - [ ] Connect via **session pooler** string (`DATABASE_URL`).
-- [ ] Test success transaction (attempt + observation + current state).
-- [ ] Test failed attempt leaves current state unchanged.
-- [ ] Verify CHECK blocks price on non-success attempts.
-- [ ] Verify history query ordering.
+- [x] Test success transaction (attempt + observation + current state).
+- [x] Test failed attempt leaves current state unchanged.
+- [x] Verify CHECK blocks price on non-success attempts.
+- [x] Verify history query ordering.
 
 ## 6. Phase 3 — Store Client + Scraper Core (Highest Priority)
 
 ### Store client (HTTP)
 
-- [ ] `fetchJson` with timeout, retry on 429/5xx/network errors.
-- [ ] `getListingsPage`, `getItem`, `getManifest`.
-- [ ] Catalog sync: repeated full passes until unique IDs == `count` (max passes), upsert `catalog_products`, report completeness.
+- [x] `fetchJson` with timeout, retry on 429/5xx/network errors.
+- [x] `getListingsPage`, `getItem`, `getManifest`.
+- [x] Catalog sync: repeated full passes until unique IDs == `count` (max passes), upsert `catalog_products`, report completeness.
 
 ### Price scraper (Playwright)
 
-- [ ] Install Playwright + Chromium.
-- [ ] Browser lifecycle: one browser per batch, new context per target, close in `finally`. Block images/fonts.
-- [ ] Navigate to `/item/:id`, wait for product name.
-- [ ] Select the tracked option; confirm it is active.
-- [ ] Hover the price panel with multiple `page.mouse.move` steps + dwell; repeat if the "Hover over the price area" message persists.
-- [ ] Wait for the `priceTag.priceValue` element to be visible and not pending.
-- [ ] Read visible price text (never `.price-value` decoy); read MRP; read stock.
+- [x] Install Playwright + Chromium.
+- [x] Browser lifecycle: one browser per batch, new context per target, close in `finally`. Block images/fonts.
+- [x] Navigate to `/item/:id`, wait for product name.
+- [x] Select the tracked option; confirm it is active.
+- [x] Hover the price panel with multiple `page.mouse.move` steps + dwell; repeat if the "Hover over the price area" message persists.
+- [x] Wait for the `priceTag.priceValue` element to be visible and not pending.
+- [x] Read visible price text (never `.price-value` decoy); read MRP; read stock.
 
 ### Normalization + validation
 
-- [ ] Strip `​`, NBSP, currency symbol, Indian grouping → number.
-- [ ] Stock text → integer (0 for "Sold out").
-- [ ] Reject name mismatch, wrong active option, pending price, non-positive/NaN price, negative stock.
-- [ ] Unit tests with fixtures.
+- [x] Strip `​`, NBSP, currency symbol, Indian grouping → number.
+- [x] Stock text → integer (0 for "Sold out").
+- [x] Reject name mismatch, wrong active option, pending price, non-positive/NaN price, negative stock.
+- [x] Unit tests with fixtures.
 
 ### Retry + classification
 
-- [ ] Max 3 attempts, exponential backoff with jitter.
-- [ ] Transient: timeout, network, 408/429/5xx, challenge timeout, price not shown.
-- [ ] Page shifted: locator miss → retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if all attempts miss.
-- [ ] Permanent: product 404, option gone → fail immediately.
+- [x] Max 3 attempts, exponential backoff with jitter.
+- [x] Transient: timeout, network, 408/429/5xx, challenge timeout, price not shown.
+- [x] Page shifted: locator miss → retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if all attempts miss.
+- [x] Permanent: product 404, option gone → fail immediately.
 
 ## 7. Phase 4 — Scrape Orchestration
 
-- [ ] `run_key` = `cron-<UTC 2h slot>`; insert `scrape_runs` `ON CONFLICT DO NOTHING`.
-- [ ] In-process "batch running" guard + `pg_try_advisory_lock`.
-- [ ] Load active targets; process sequentially and independently.
-- [ ] Write one attempt row per attempt (`retried` / `failed` / `success`).
-- [ ] On success: attempt + observation + current state in one transaction.
-- [ ] On final failure: attempt + `consecutive_failures++`, no current-state change.
-- [ ] Finish run with counts and status (`completed` / `partial` / `failed`).
-- [ ] At run start, close runs stuck `running` >30 min as `failed`.
-- [ ] Health endpoint: `lastCronRunAt`, `schedulerStale` (>2 h 30 min); dashboard banner when stale.
+- [x] `run_key` = `cron-<UTC 2h slot>`; insert `scrape_runs` `ON CONFLICT DO NOTHING`.
+- [x] In-process "batch running" guard + `pg_try_advisory_lock`.
+- [x] Load active targets; process sequentially and independently.
+- [x] Write one attempt row per attempt (`retried` / `failed` / `success`).
+- [x] On success: attempt + observation + current state in one transaction.
+- [x] On final failure: attempt + `consecutive_failures++`, no current-state change.
+- [x] Finish run with counts and status (`completed` / `partial` / `failed`).
+- [x] At run start, close runs stuck `running` >30 min as `failed`.
+- [x] Health endpoint: `lastCronRunAt`, `schedulerStale` (>2 h 30 min); dashboard banner when stale.
 
 ## 8. Phase 5 — Backend API
 
-- [ ] `GET /api/health`
-- [ ] `GET /api/products/search` (catalog cache)
-- [ ] `GET /api/products/:storeProductId` (live item + options)
-- [ ] `POST /api/catalog/sync` (protected)
-- [ ] `POST /api/tracked-products` (validate against store; reactivate if soft-deleted; queue initial scrape)
-- [ ] `GET /api/tracked-products`
-- [ ] `GET /api/tracked-products/:id`
-- [ ] `DELETE /api/tracked-products/:id`
-- [ ] `GET /api/tracked-products/:id/history`
-- [ ] `GET /api/tracked-products/:id/scrape-logs`
-- [ ] `POST /api/scrape/run` (protected, `202` + background)
-- [ ] `POST /api/scrape/:trackedProductId` (protected)
-- [ ] `GET /api/runs/:runId`
-- [ ] `GET /api/export.csv`
+- [x] `GET /api/health`
+- [x] `GET /api/products/search` (catalog cache)
+- [x] `GET /api/products/:storeProductId` (live item + options)
+- [x] `POST /api/catalog/sync` (protected)
+- [x] `POST /api/tracked-products` (validate against store; reactivate if soft-deleted; queue initial scrape)
+- [x] `GET /api/tracked-products`
+- [x] `GET /api/tracked-products/:id`
+- [x] `DELETE /api/tracked-products/:id`
+- [x] `GET /api/tracked-products/:id/history`
+- [x] `GET /api/tracked-products/:id/scrape-logs`
+- [x] `POST /api/scrape/run` (protected, `202` + background)
+- [x] `POST /api/scrape/:trackedProductId` (protected)
+- [x] `GET /api/runs/:runId`
+- [x] `GET /api/export.csv`
 
-- [ ] Centralized validation + error middleware + request ID.
-- [ ] Bearer-secret middleware (constant-time compare).
-- [ ] CORS limited to `FRONTEND_ORIGIN`.
+- [x] Centralized validation + error middleware + request ID.
+- [x] Bearer-secret middleware (constant-time compare).
+- [x] CORS limited to `FRONTEND_ORIGIN`.
 
 ## 9. Phase 6 — Headed CLI
 
-- [ ] `npm run scrape:headed -- --tracked-product-id <id>` → same scraper with `headless: false`, `slowMo`, writes real attempt rows (`trigger_source = demo`).
-- [ ] Optional `--simulate-timeout` flag that lowers the price-ready timeout to force a visible retry. Must be documented and labelled as a demo aid, not presented as a real store failure.
+- [x] `npm run scrape:headed -- --tracked-product-id <id>` → same scraper with `headless: false`, `slowMo`, writes real attempt rows (`trigger_source = demo`).
+- [x] Optional `--simulate-timeout` flag that lowers the price-ready timeout to force a visible retry. Must be documented and labelled as a demo aid, not presented as a real store failure.
 
 ## 10. Phase 7 — Deploy Backend + Scheduler (do early)
 

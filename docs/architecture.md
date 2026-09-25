@@ -212,15 +212,16 @@ Reproducing steps 3a–c over plain HTTP would mean reverse-engineering obfuscat
 
 ### 5.3 Price Extraction Procedure (Playwright)
 
-1. Fetch `/api/v2/ui/manifest` → `classes.priceValue`, `classes.stock`, `classes.priceWrap`, `classes.sale`, `classes.mrp`, `priceTag`, `priceCarrier`, `revision`.
+1. Use the manifest **the page itself loaded** (captured from its `/api/v2/ui/manifest` response) → `classes.priceValue`, `classes.stock`, `classes.mrp`, `priceTag`, `revision`. A manifest fetched over HTTP at batch start is the fallback, so a rotation between our fetch and the page's cannot cause a mismatch.
 2. Open `/item/:id`; wait for the product name to match the tracked name.
-3. Select the tracked option (by label, then confirm it is the active option).
-4. Move the mouse into the price panel (`.offer-panel`) with several `page.mouse.move` steps, then hold for the dwell period.
-5. Wait for the price element `<priceTag>.<priceValue>` to be visible **and** not pending (the page dims the price to `opacity: 0.45` while loading).
-6. Read `innerText` of the visible price element. **Never** read the hidden `.price-value` span, which is a decoy.
-7. Normalize: strip zero-width spaces (`​`), NBSP, currency symbol and Indian digit grouping (`1,29,999.00` → `129999.00`).
-8. Read the stock element: a count pill (`avail-yes`) or `Sold out` (`avail-no`) → integer quantity (0 = sold out). The count pill uses one of five wordings (`7 units available`, `Last few: 7`, `Available (7)`, `Stock: 7 remaining`, `Ready to ship · 7 available`). Extract the single integer, and fail validation if there is not exactly one.
-9. Validate (§5.6). If valid, return a structured result.
+3. Dismiss the cookie-consent overlay (**Reject**) if it appears; it blocks all pointer input.
+4. Select the tracked option chip by label and confirm `aria-pressed="true"` (re-click if the event was dropped).
+5. Move the mouse into the price panel (`.offer-panel`) with many `page.mouse.move` steps until the `Check today's price` button enables, then click it.
+6. Wait for the panel to be `offer-ready` and the price element `<priceTag>.<priceValue>` to be visible **and** not pending (the page dims the price to `opacity: 0.45` while loading). Confirm the quote request's `opt=` equals the tracked option key.
+7. Read the text of the single visible price element. **Never** read the hidden `.price-value` or `.amount[data-price]` spans, which are decoys.
+8. Normalize: strip zero-width spaces (`​`), NBSP, currency symbol and Indian digit grouping (`1,29,999.00` → `129999.00`).
+9. Read the stock element: a count pill (`avail-yes`) or `Sold out` (`avail-no`) → integer quantity (0 = sold out). The count pill uses one of five wordings (`7 units available`, `Last few: 7`, `Available (7)`, `Stock: 7 remaining`, `Ready to ship · 7 available`). Extract the single integer, and fail validation if there is not exactly one.
+10. Validate (§5.6). If valid, return a structured result.
 
 Use locator auto-waiting and explicit conditions, not fixed sleeps. The only intentional delay is the hover dwell the page itself requires. [Playwright locators](https://playwright.dev/docs/locators)
 

@@ -105,7 +105,13 @@ cd backend && npm install && npx playwright install chromium
 cd ../frontend && npm install
 ```
 
-Apply the database schema from `backend/db/schema.sql` (see [`docs/database.md`](./docs/database.md)) in the Supabase SQL editor.
+Apply the database schema from `backend/db/schema.sql` (see [`docs/database.md`](./docs/database.md)) in the Supabase SQL editor, or from the backend with `DATABASE_URL` set (idempotent):
+
+```bash
+cd backend && npm run db:schema
+```
+
+The catalog syncs automatically on first start when `catalog_products` is empty. `npm run catalog:sync` forces a refresh from the CLI.
 
 ## Development
 

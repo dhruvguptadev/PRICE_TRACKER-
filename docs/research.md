@@ -72,6 +72,15 @@ Conclusion: price/stock **require a real browser with real (Playwright) mouse in
 - **Stock:** `stock > 0` → pill `.avail-yes` with the count in one of five rotating wordings: `N units available`, `Last few: N`, `Available (N)`, `Stock: N remaining`, `Ready to ship · N available` (chosen by `N % 5`). Otherwise `.avail-no` "Sold out".
 - **Flaky handlers:** some UI event handlers are wrapped so that ~35% of the time the event is either dropped or delayed by 900 ms. Hover/click may need to be repeated.
 
+### 3.4.1 Confirmed in a real browser during implementation (2026-09-25)
+
+- **Unlock button:** hovering alone does not load the price. Hovering enables a `Check today's price` button (`.offer-panel button.ctl-main`, disabled until the hover check passes); clicking it runs `GET/POST /api/v2/handshake` then `GET /api/v2/items/:id/quote?opt=<key>`. The panel goes `offer-locked` → loading ("Loading current price…") → `offer-ready`.
+- **Cookie-consent overlay:** a `.consent-scrim` modal (Allow / Reject) appears ~3 s after load on some page loads and intercepts all pointer events, so hover and clicks silently do nothing. The scraper clicks **Reject**.
+- **Default option varies:** the preselected option is not always the first (e.g. `Duo` of Solo/Duo/Family). Option chips are `.opt-picker .opt-chip` with `aria-pressed="true"` on the active one.
+- **Second decoy:** besides `.price-value`, a hidden `<span class="amount" data-price="true" aria-hidden="true" style="display:none">` holds another fake price.
+- **Split price in practice:** `<output class="… xsu-j2">` contains one `<span>` per character interleaved with `U+200B` and NBSP.
+- A full catalog sync needed 8 passes of 16 pages to reach 960/960 (pass 1: 603).
+
 ### 3.5 Product ID for CSV
 
 Product URL is `https://demo.inelabteamdev.com/item/2765`, so `product_id = 2765` (numeric `id`, same as in the API).

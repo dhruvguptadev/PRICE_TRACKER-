@@ -36,7 +36,17 @@
 | Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch, plus a warm-up ping 5 min earlier for the cold start |
 | No detection of missed/stuck runs | Brief says "never silently stop" | `schedulerStale` in health + dashboard banner; stuck runs closed as `failed` |
 
-*(Add implementation-time mistakes here as they happen, e.g. wrong selector choice, reading the decoy, stale price after option change.)*
+Implementation-time corrections (found by driving the real page):
+
+| Assumed in the docs | What the live page did | Correction |
+|---|---|---|
+| Hovering the price panel loads the price | Hover only enables a `Check today's price` button; the quote loads after clicking it | Hover until the button enables, click, wait for `offer-ready` |
+| Nothing blocks the page | A cookie-consent modal appears ~3 s after load on some loads and swallows the hover, so the price never unlocks | Wait briefly for it and click **Reject**; also a Playwright locator handler for late appearances |
+| The first option is preselected | Default option varies per product/load | Always click the tracked chip and confirm `aria-pressed` + the quote's `opt=` key |
+| One decoy (`.price-value`) | A second hidden decoy `.amount[data-price]` | Only read the single *visible* `<priceTag>.<priceValue>` element |
+| Fetch the manifest once per run | The page loads its own manifest; classes can rotate between our fetch and the page's | Use the manifest the page itself loaded; ours is the fallback |
+| Same-slot duplicate cron trigger while the batch is still running → `409` (first implementation) | api.md says a duplicate slot is `200 duplicate` | Check the slot's `run_key` before the "batch running" guard |
+| 8 catalog passes are enough | Real sync reached 960/960 exactly on pass 8 | Pass limit raised to 15 |
 
 ---
 
