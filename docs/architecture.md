@@ -219,7 +219,7 @@ Reproducing steps 3a–c over plain HTTP would mean reverse-engineering obfuscat
 5. Wait for the price element `<priceTag>.<priceValue>` to be visible **and** not pending (the page dims the price to `opacity: 0.45` while loading).
 6. Read `innerText` of the visible price element. **Never** read the hidden `.price-value` span, which is a decoy.
 7. Normalize: strip zero-width spaces (`​`), NBSP, currency symbol and Indian digit grouping (`1,29,999.00` → `129999.00`).
-8. Read the stock element: a count pill (`avail-yes`) or `Sold out` (`avail-no`) → integer quantity (0 = sold out).
+8. Read the stock element: a count pill (`avail-yes`) or `Sold out` (`avail-no`) → integer quantity (0 = sold out). The count pill uses one of five wordings (`7 units available`, `Last few: 7`, `Available (7)`, `Stock: 7 remaining`, `Ready to ship · 7 available`). Extract the single integer, and fail validation if there is not exactly one.
 9. Validate (§5.6). If valid, return a structured result.
 
 Use locator auto-waiting and explicit conditions, not fixed sleeps. The only intentional delay is the hover dwell the page itself requires. [Playwright locators](https://playwright.dev/docs/locators)
@@ -289,17 +289,16 @@ One target's failure must not abort the batch. Each target gets a fresh browser 
 ## 7. Scheduler and Free-Tier Behavior
 
 ```text
-cron-job.org  (every 2 hours, POST + bearer secret)
-   ↓
-Render Web Service  (may cold-start ~50 s)
+cron-job.org  :55 odd hours  GET /api/health          → wakes Render (cold start ~50 s)
+cron-job.org  :00 even hours POST /api/scrape/run     → instance already warm
    ↓ 202 Accepted immediately
 background batch → Playwright → Supabase
 ```
 
 Constraints that shape this:
 
-- **cron-job.org timeout (~30 s):** the endpoint must not wait for the batch, so it responds `202` and runs in the background.
-- **Render free sleeps after ~15 min idle:** the incoming cron request wakes it, and background work finishes well within the active window.
+- **cron-job.org timeout (~30 s):** shorter than both a cold start and a batch. The warm-up ping 5 minutes earlier absorbs the cold start (the brief: "keep the instance warm if needed"). The scrape endpoint then responds `202` and runs in the background.
+- **Render free sleeps after ~15 min idle:** the warm-up + scrape requests keep it awake long enough for the batch to finish.
 - **512 MB RAM:** one Chromium, sequential targets, new context per target, browser always closed in `finally`. Block images/fonts to save memory.
 - **Supabase direct connection is IPv6-only; Render has no outbound IPv6:** connect via the Supabase **session pooler** string.
 
@@ -311,6 +310,16 @@ Alternative considered: Render Cron Job (a separate service type, not part of th
 - Manual/demo runs use `manual-<uuid>` and are always allowed.
 - An in-process flag prevents two batches running at once in the same instance. A PostgreSQL advisory lock (`pg_try_advisory_lock`) guards across instances.
 - `UNIQUE(tracked_product_id, run_id, attempt_number)` prevents duplicate attempt rows.
+
+### 8.1 Never Silently Stop
+
+The brief says the scraper must "never silently stop". Failures inside a run are already logged per attempt. Two further ways it could stop silently are covered:
+
+| Silent stop | Detection / recovery |
+|---|---|
+| Scheduler stops firing, or Render is down when it fires | `/api/health` returns `lastCronRunAt` and `schedulerStale = true` when no cron run started in the last 2 h 30 min. The dashboard shows a banner. cron-job.org failure notifications are enabled. |
+| Instance crashes/restarts mid-batch, leaving a run `running` | At the start of every run, runs `running` for more than 30 min are marked `failed` with `finished_at = now()`. The run list shows them honestly. |
+| A target keeps failing every run | `consecutive_failures` is shown on the dashboard, highlighted at 3 or more. |
 
 ## 9. API Error Handling
 

@@ -33,7 +33,8 @@
 | "Don't retry selector misses / malformed extraction" | Misses are mostly transient here (late content, dropped hover events, rotating classes), and the brief says to recover when a page shifts | Retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if persistent |
 | Frontend documented as React + Vite (`VITE_API_BASE_URL`) | Repo uses Next.js 16 | Docs switched to Next.js, `NEXT_PUBLIC_API_BASE_URL` |
 | `SUPABASE_DATABASE_URL` direct connection | Supabase direct connection is IPv6-only; Render can't reach it | Use the session pooler connection string |
-| Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch |
+| Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch, plus a warm-up ping 5 min earlier for the cold start |
+| No detection of missed/stuck runs | Brief says "never silently stop" | `schedulerStale` in health + dashboard banner; stuck runs closed as `failed` |
 
 *(Add implementation-time mistakes here as they happen, e.g. wrong selector choice, reading the decoy, stale price after option change.)*
 
@@ -73,9 +74,9 @@
 
 ## Decision 005 — External scheduler with async trigger
 
-**Decision:** cron-job.org calls `POST /api/scrape/run` every 2 hours with a bearer secret. The endpoint returns `202` and runs the batch in the background.
+**Decision:** cron-job.org calls `POST /api/scrape/run` every 2 hours with a bearer secret. The endpoint returns `202` and runs the batch in the background. A second job pings `GET /api/health` 5 minutes earlier to wake the instance.
 
-**Why:** Free Render instances sleep, and cron-job.org times out long requests.
+**Why:** Free Render instances sleep and cold-start in ~50 s. cron-job.org times out after ~30 s. Without the warm-up, the scrape request can time out before the app even starts. The brief says to "keep the instance warm if needed".
 
 **Trade-off:** External dependency. Mitigated by the secret, idempotent `run_key`, and the visible run history.
 

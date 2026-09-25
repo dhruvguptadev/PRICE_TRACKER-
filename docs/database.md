@@ -141,9 +141,9 @@ Purpose: batch-level execution metadata.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | PK |
-| `run_key` | text | Unique idempotency key: `cron-<UTC 2h slot>` e.g. `cron-2026-09-25T10`, or `manual-<uuid>` |
+| `run_key` | text | Unique idempotency key: `cron-<UTC 2h slot>` e.g. `cron-2026-09-25T10`; other sources use `<source>-<uuid>` (`manual-…`, `initial-…`, `demo-…`) |
 | `trigger_source` | text | `cron`, `manual`, `initial`, `demo` |
-| `status` | text | `running`, `completed`, `partial`, `failed` |
+| `status` | text | `running`, `completed`, `partial`, `failed` (a run stuck `running` >30 min is closed as `failed` by the next run) |
 | `started_at` | timestamptz | UTC |
 | `finished_at` | timestamptz | UTC |
 | `target_count` | integer | Targets selected |

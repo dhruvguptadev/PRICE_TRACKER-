@@ -69,7 +69,7 @@ Conclusion: price/stock **require a real browser with real (Playwright) mouse in
 - **Pending state:** while (re)loading, the price is shown with `opacity: 0.45`. Reading it then gives a stale value (e.g. the previous option's price).
 - **Multiple prices:** MRP (line-through, class `mrp`), sometimes a sale/member price (class `sale`), and the main price.
 - **Currency formatting:** `Intl.NumberFormat('en-IN', { style: 'currency' })`, so Indian digit grouping (e.g. `₹1,29,999.00`). The currency code comes from the payload (expected INR).
-- **Stock:** `stock > 0` → pill `.avail-yes` with a formatted count; otherwise `.avail-no` "Sold out".
+- **Stock:** `stock > 0` → pill `.avail-yes` with the count in one of five rotating wordings: `N units available`, `Last few: N`, `Available (N)`, `Stock: N remaining`, `Ready to ship · N available` (chosen by `N % 5`). Otherwise `.avail-no` "Sold out".
 - **Flaky handlers:** some UI event handlers are wrapped so that ~35% of the time the event is either dropped or delayed by 900 ms. Hover/click may need to be repeated.
 
 ### 3.5 Product ID for CSV

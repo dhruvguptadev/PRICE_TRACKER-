@@ -103,6 +103,8 @@ Build in vertical slices instead of completing the frontend first:
 - [ ] On success: attempt + observation + current state in one transaction.
 - [ ] On final failure: attempt + `consecutive_failures++`, no current-state change.
 - [ ] Finish run with counts and status (`completed` / `partial` / `failed`).
+- [ ] At run start, close runs stuck `running` >30 min as `failed`.
+- [ ] Health endpoint: `lastCronRunAt`, `schedulerStale` (>2 h 30 min); dashboard banner when stale.
 
 ## 8. Phase 5 — Backend API
 
@@ -143,8 +145,9 @@ Build in vertical slices instead of completing the frontend first:
 
 ### cron-job.org
 
-- [ ] `POST https://<render>.onrender.com/api/scrape/run`, header `Authorization: Bearer …`.
-- [ ] Schedule every 2 hours.
+- [ ] Warm-up job: `GET /api/health` at `55 1-23/2 * * *` (5 min before each scrape).
+- [ ] Scrape job: `POST https://<render>.onrender.com/api/scrape/run`, header `Authorization: Bearer …`, `0 */2 * * *`.
+- [ ] Enable failure notifications on both jobs.
 - [ ] Trigger once manually; confirm `202` and rows in `scrape_runs` / `scrape_attempts`.
 - [ ] Track 2–3 products so unattended history starts accumulating.
 
@@ -203,7 +206,10 @@ Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
 | Option no longer offered | `failed` immediately (`OPTION_NOT_FOUND`) |
 | One target fails in batch | remaining targets continue |
 | Duplicate cron trigger in same slot | `200 duplicate`, no new run |
-| Backend asleep when cron fires | wakes, returns `202`, run completes |
+| Backend asleep before scrape | warm-up ping wakes it; scrape call returns `202` within 30 s |
+| Scheduler stops firing | `schedulerStale = true`, dashboard banner, cron-job.org email |
+| Instance restarts mid-batch | stuck run closed as `failed` by next run |
+| Stock text in any of the 5 wordings | integer extracted correctly |
 
 ## 14. Phase 11 — Headed Demo (2–4 min)
 

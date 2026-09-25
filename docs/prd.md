@@ -209,6 +209,12 @@ Never persist a successful price/stock observation unless required fields are pr
 
 A transient scrape error shall not terminate the complete batch.
 
+The system shall never stop silently:
+
+- missed scheduled runs are detected (`schedulerStale` in health + dashboard banner + cron-job.org failure notifications)
+- runs interrupted by a crash/restart are closed as `failed` by the next run
+- targets that keep failing are highlighted (`consecutive_failures`)
+
 ### NFR-03 Observability
 
 Each scrape attempt shall be traceable using a `run_id`, tracked target ID, attempt number, start/end timestamps, outcome, and error information when applicable.

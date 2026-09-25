@@ -149,7 +149,22 @@ POST https://<render-service>.onrender.com/api/scrape/run
 Authorization: Bearer <SCRAPE_TRIGGER_SECRET>
 ```
 
-The endpoint responds `202 Accepted` immediately and runs the batch in the background. This matters because a sleeping Render instance can take ~50 s to wake and a Playwright batch takes longer still, while cron-job.org times out requests after about 30 s. The run is recorded in `scrape_runs`, keyed by its 2-hour slot, so a duplicate trigger cannot create a duplicate run.
+Two cron-job.org jobs handle Render's free-tier sleep:
+
+| Job | Schedule (UTC) | Request |
+|---|---|---|
+| Warm-up | `55 1-23/2 * * *` (5 min before each scrape) | `GET /api/health` |
+| Scrape | `0 */2 * * *` | `POST /api/scrape/run` with bearer secret |
+
+- A sleeping Render instance takes ~50 s to wake, which is longer than cron-job.org's ~30 s timeout. The warm-up ping wakes it first, and the instance stays awake for ~15 minutes.
+- The scrape endpoint responds `202 Accepted` immediately and runs the batch in the background, because a Playwright batch also takes longer than 30 s.
+- Runs are keyed by their 2-hour slot, so a duplicate trigger cannot create a duplicate run.
+
+**Missed-run detection (never silently stop):**
+
+- `GET /api/health` reports the last scheduled run and `schedulerStale: true` when no cron run has started for more than 2 h 30 min. The dashboard shows a warning banner in that case.
+- A run left `running` by a crash or restart is closed as `failed` at the start of the next run.
+- cron-job.org failure notifications are enabled for both jobs.
 
 Do not rely on `setInterval()` inside the web server as the scheduler — the free instance sleeps.
 
@@ -244,9 +259,18 @@ Render free instances have 512 MB RAM, so the scraper runs one browser and one t
 
 ### 4. Scheduler (cron-job.org)
 
+Warm-up job:
+
+- URL: `https://<render-service>.onrender.com/api/health`, method `GET`
+- Schedule: 5 minutes before each scrape (`55 1-23/2 * * *`)
+
+Scrape job:
+
 - URL: `https://<render-service>.onrender.com/api/scrape/run`, method `POST`
 - Header: `Authorization: Bearer <SCRAPE_TRIGGER_SECRET>`
 - Schedule: every 2 hours (`0 */2 * * *`)
+
+Enable failure notifications on both jobs.
 
 ## Headed Mode
 

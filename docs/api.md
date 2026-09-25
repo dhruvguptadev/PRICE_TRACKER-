@@ -60,7 +60,7 @@ Error:
 
 ### GET `/api/health`
 
-Deployment health check. Also used to warm the instance.
+Deployment health check. Also the cron-job.org warm-up target 5 minutes before each scrape. `schedulerStale` is `true` when no cron run has started in the last 2 h 30 min; the dashboard shows a warning when it is.
 
 ```json
 {
@@ -69,6 +69,11 @@ Deployment health check. Also used to warm the instance.
     "service": "price-tracker-api",
     "db": "ok",
     "catalog": { "count": 960, "complete": true },
+    "scheduler": {
+      "lastCronRunAt": "2026-09-25T10:00:01.000Z",
+      "lastCronRunStatus": "completed",
+      "schedulerStale": false
+    },
     "timestamp": "2026-09-25T12:00:00.000Z"
   }
 }
