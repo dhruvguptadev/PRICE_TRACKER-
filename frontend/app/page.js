@@ -52,10 +52,10 @@ export default function Landing() {
       <section className="relative isolate grid gap-12 pb-14 pt-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:pt-14">
         <div aria-hidden="true" className="bg-dots absolute inset-x-[-1rem] inset-y-0 -z-10 sm:inset-x-[-1.5rem]" />
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted">Price &amp; stock tracker · INE mock storefront</p>
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">Price &amp; stock tracker · INE mock storefront</p>
           <h1 className="mt-5 font-serif text-[2.9rem] leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.4rem]">
             Checks the price every two hours.
-            <span className="block italic text-ink-2">Writes down every time it couldn’t.</span>
+            <span className="block italic text-accent">Writes down every time it couldn’t.</span>
           </h1>
           <p className="mt-7 max-w-xl text-[1.05rem] leading-relaxed text-ink-2">
             Pick a product and the exact option you care about: the walnut finish, not the oak. A headless browser opens the
@@ -65,12 +65,12 @@ export default function Landing() {
           <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/dashboard"
-              className="group inline-flex items-center gap-2 rounded-md bg-ink px-5 py-2.5 text-sm font-semibold text-page transition-opacity hover:opacity-85"
+              className="group inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong"
             >
               Open the dashboard
               <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
             </Link>
-            <a href={exportCsvUrl} className="text-sm font-medium underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink">
+            <a href={exportCsvUrl} className="text-sm font-medium underline decoration-accent/30 decoration-2 underline-offset-4 hover:decoration-accent">
               Download the full log as CSV
             </a>
           </div>
@@ -256,7 +256,7 @@ export default function Landing() {
                 {!last && <span aria-hidden="true" className="absolute left-[1.125rem] top-9 bottom-0 w-px -translate-x-1/2 bg-line" />}
                 <span
                   className={`tabular grid h-9 w-9 place-items-center rounded-full font-mono text-xs ring-1 ${
-                    last ? 'bg-ink text-page ring-ink' : 'bg-surface text-ink-2 ring-line'
+                    last ? 'bg-accent text-accent-ink ring-accent' : 'bg-surface text-ink-2 ring-line'
                   }`}
                 >
                   {String(i + 1).padStart(2, '0')}
@@ -321,14 +321,14 @@ export default function Landing() {
       </section>
 
       {/* ── Closing CTA ──────────────────────────────────────── */}
-      <section className="mb-14 flex flex-col items-start justify-between gap-6 rounded-xl bg-ink px-6 py-10 text-page sm:flex-row sm:items-center sm:px-10">
+      <section className="mb-14 flex flex-col items-start justify-between gap-6 rounded-xl bg-accent-soft px-6 py-10 ring-1 ring-accent/15 sm:flex-row sm:items-center sm:px-10">
         <div>
           <h2 className="font-serif text-3xl leading-tight sm:text-4xl">See what it found today.</h2>
-          <p className="mt-2 text-sm opacity-70">Search the catalogue, track an option, and watch the history build up.</p>
+          <p className="mt-2 text-sm text-ink-2">Search the catalogue, track an option, and watch the history build up.</p>
         </div>
         <Link
           href="/dashboard"
-          className="group inline-flex shrink-0 items-center gap-2 rounded-md bg-page px-5 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90"
+          className="group inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong"
         >
           Open the dashboard
           <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -350,7 +350,7 @@ export default function Landing() {
 function SectionHead({ n, title, children }) {
   return (
     <header className="max-w-2xl">
-      <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted">{n}</p>
+      <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">{n}</p>
       <h2 className="mt-3 font-serif text-4xl leading-tight sm:text-[2.75rem]">{title}</h2>
       {children && <p className="mt-4 text-sm leading-relaxed text-ink-2 sm:text-[0.95rem]">{children}</p>}
     </header>
@@ -363,7 +363,7 @@ function Trap({ n, title, specimen, className = '', children }) {
       <div className="flex min-h-16 items-center border-b border-dashed border-line px-5 py-4">{specimen}</div>
       <div className="flex-1 p-5">
         <h3 className="flex items-baseline gap-2.5 text-base font-semibold">
-          <span className="font-serif text-xl font-normal leading-none text-muted">{n}</span>
+          <span className="font-serif text-xl font-normal leading-none text-accent">{n}</span>
           {title}
         </h3>
         <p className="mt-2 text-[0.93rem] leading-relaxed text-ink-2">{children}</p>
