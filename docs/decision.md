@@ -51,6 +51,7 @@ Implementation-time corrections (found by driving the real page):
 | Prisma handles timestamps transparently | With a non-UTC database session, `@prisma/adapter-pg` shifted `timestamptz` reads/writes by the session offset (+05:30 locally) | Pin every connection to `TimeZone=UTC` via the pool's startup options |
 | The page's manifest is available once the heading renders | Sometimes still in flight, so the scraper had no class map | Explicitly await the page's manifest response |
 | "Panel ready but price selector missing" means the page shifted | Live run: the manifest-classed element *was* present but never settled; logged as `STRUCTURE_CHANGED` | Report it as `PRICE_NOT_READY` with opacity/text diagnostics; keep `STRUCTURE_CHANGED` for a truly missing element |
+| Prices use ASCII digits | First live scrapes on Render: the store rendered `₹３６,５５６` in fullwidth digits; the strict parser rejected it (correctly) and only the retry succeeded | Fold fullwidth (NFKC) and native-script digits to ASCII before parsing; still reject anything that isn't exactly one amount |
 
 ---
 

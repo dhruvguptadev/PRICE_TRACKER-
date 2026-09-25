@@ -7,8 +7,25 @@ const SPACES = /[\s  ]/g;
 
 const CURRENCY_SYMBOLS = { '₹': 'INR', Rs: 'INR', 'Rs.': 'INR', INR: 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
 
+// Zero code points of the decimal-digit blocks the store could plausibly use besides ASCII
+// (Arabic-Indic, Extended Arabic-Indic, Devanagari, Bengali, Gurmukhi, Gujarati, Tamil, Telugu, Kannada, Malayalam).
+const DIGIT_ZEROS = [0x0660, 0x06f0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0be6, 0x0c66, 0x0ce6, 0x0d66];
+const OTHER_DIGITS = /[\u0660-\u0669\u06F0-\u06F9\u0966-\u096F\u09E6-\u09EF\u0A66-\u0A6F\u0AE6-\u0AEF\u0BE6-\u0BEF\u0C66-\u0C6F\u0CE6-\u0CEF\u0D66-\u0D6F]/g;
+
+/**
+ * NFKC folds fullwidth forms (the store has served "₹３６,５５６") to ASCII; the table handles
+ * native-script digits. Parsing stays strict afterwards: the result must still be one amount.
+ */
+function asciiDigits(text) {
+  return text.normalize('NFKC').replace(OTHER_DIGITS, (ch) => {
+    const cp = ch.codePointAt(0);
+    const zero = DIGIT_ZEROS.find((z) => cp >= z && cp <= z + 9);
+    return String(cp - zero);
+  });
+}
+
 export function cleanText(text) {
-  return String(text ?? '').replace(INVISIBLE, '').replace(SPACES, ' ').trim();
+  return asciiDigits(String(text ?? '')).replace(INVISIBLE, '').replace(SPACES, ' ').trim();
 }
 
 /**

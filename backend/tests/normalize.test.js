@@ -14,6 +14,15 @@ test('parsePrice: Indian digit grouping with decimals', () => {
   assert.deepEqual(parsePrice('999'), { amount: 999, currency: null });
 });
 
+test('parsePrice: fullwidth and native-script digits (seen live on Render, 26 Sep)', () => {
+  assert.deepEqual(parsePrice('₹３６,５５６'), { amount: 36556, currency: 'INR' });
+  assert.deepEqual(parsePrice('₹\u200B３\u200B０,３１６'), { amount: 30316, currency: 'INR' });
+  assert.deepEqual(parsePrice('₹１,２９,９９９．００'), { amount: 129999, currency: 'INR' });
+  assert.deepEqual(parsePrice('₹२३,९३२'), { amount: 23932, currency: 'INR' });
+  assert.equal(parseStock('Available (１５１)'), 151);
+  assert.equal(parsePrice('₹３６,５５６ ₹４０,０００'), null);
+});
+
 test('parsePrice: rejects anything that is not exactly one amount', () => {
   for (const bad of ['', null, 'Price locked', '₹', '₹12,999 ₹15,999', '12.345', '-500', 'Hold on — checking availability…']) {
     assert.equal(parsePrice(bad), null, `should reject ${JSON.stringify(bad)}`);
