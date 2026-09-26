@@ -9,7 +9,7 @@ const FAILURE_HIGHLIGHT = 3;
 export default function TrackedTable({ items, onUntrack, busyId }) {
   if (!items.length) {
     return (
-      <div className="rounded-xl bg-surface p-8 text-center ring-1 ring-line">
+      <div className="card rounded-2xl bg-surface p-10 text-center">
         <p className="font-medium">No products tracked yet</p>
         <p className="mt-1 text-sm text-ink-2">Search above and pick an option to start tracking its price and stock every 2 hours.</p>
       </div>
@@ -17,9 +17,9 @@ export default function TrackedTable({ items, onUntrack, busyId }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl bg-surface ring-1 ring-line">
+    <div className="card relative overflow-x-auto rounded-2xl bg-surface">
       <table className="w-full min-w-[760px] text-sm">
-        <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+        <thead className="border-b border-line bg-surface-2/60 text-left text-xs text-muted">
           <tr>
             <th scope="col" className="px-4 py-3 font-medium">Product / option</th>
             <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>
@@ -34,10 +34,10 @@ export default function TrackedTable({ items, onUntrack, busyId }) {
           {items.map((t) => {
             const failing = t.consecutiveFailures >= FAILURE_HIGHLIGHT;
             return (
-              <tr key={t.id} className={failing ? 'bg-critical/5' : undefined}>
-                <td className="px-4 py-3">
-                  <Link href={`/products/${t.id}`} className="font-medium hover:text-accent hover:underline">{t.productName}</Link>
-                  <div className="text-xs text-muted">{t.optionAxis}: {t.selectedOption} · #{t.storeProductId}</div>
+              <tr key={t.id} className={`transition-colors ${failing ? 'bg-critical/5' : 'hover:bg-surface-2/50'}`}>
+                <td className="px-4 py-3.5">
+                  <Link href={`/products/${t.id}`} className="font-medium text-ink hover:text-accent">{t.productName} <span aria-hidden="true" className="text-muted">→</span></Link>
+                  <div className="mt-0.5 text-xs text-muted">{t.optionAxis}: <span className="font-medium text-ink-2">{t.selectedOption}</span> · #{t.storeProductId}</div>
                 </td>
                 <td className="tabular px-4 py-3 text-right">
                   <div className="font-semibold">{formatPrice(t.currentPrice, t.currency)}</div>
@@ -61,7 +61,7 @@ export default function TrackedTable({ items, onUntrack, busyId }) {
                     type="button"
                     onClick={() => onUntrack(t)}
                     disabled={busyId === t.id}
-                    className="rounded-md px-2 py-1 text-xs text-ink-2 ring-1 ring-line hover:bg-surface-2 disabled:opacity-40"
+                    className="rounded-md px-2.5 py-1 text-xs font-medium text-ink-2 ring-1 ring-line transition-colors hover:bg-critical/10 hover:text-critical-ink hover:ring-critical/30 disabled:opacity-40"
                   >
                     {busyId === t.id ? 'Removing…' : 'Stop tracking'}
                   </button>

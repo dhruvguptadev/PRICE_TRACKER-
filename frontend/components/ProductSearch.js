@@ -63,21 +63,27 @@ export default function ProductSearch({ onTracked }) {
   const product = detail.product;
 
   return (
-    <section className="rounded-xl bg-surface p-5 ring-1 ring-line" aria-labelledby="search-heading">
-      <h2 id="search-heading" className="text-lg font-semibold">Track a product</h2>
+    <section className="card rounded-2xl bg-surface p-5 sm:p-6" aria-labelledby="search-heading">
+      <h2 id="search-heading" className="text-xl font-semibold">Track a product</h2>
       <p className="mt-1 text-sm text-ink-2">Search by full or partial product name or brand, then choose the exact option to track.</p>
 
       <label htmlFor="product-search" className="sr-only">Search products</label>
-      <input
-        id="product-search"
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        maxLength={100}
-        placeholder="e.g. filing cabinet, trekking poles, Halvard…"
-        className="mt-4 w-full rounded-lg bg-page px-4 py-2.5 text-base ring-1 ring-line outline-none placeholder:text-muted focus:ring-2 focus:ring-accent"
-        autoComplete="off"
-      />
+      <div className="relative mt-4">
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-muted">
+          <circle cx="8.5" cy="8.5" r="5.5" />
+          <path d="m13 13 4 4" strokeLinecap="round" />
+        </svg>
+        <input
+          id="product-search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          maxLength={100}
+          placeholder="e.g. filing cabinet, trekking poles, Halvard…"
+          className="w-full rounded-xl bg-page py-3 pl-11 pr-4 text-base ring-1 ring-line outline-none transition-shadow placeholder:text-muted focus:bg-surface focus:ring-2 focus:ring-accent"
+          autoComplete="off"
+        />
+      </div>
 
       <div className="mt-3 min-h-6 text-sm" aria-live="polite">
         {q.length > 0 && q.length < MIN_QUERY && <p className="text-muted">Keep typing…</p>}
@@ -87,7 +93,7 @@ export default function ProductSearch({ onTracked }) {
       </div>
 
       {shown.items.length > 0 && (
-        <ul className="mt-1 divide-y divide-line overflow-hidden rounded-lg ring-1 ring-line">
+        <ul className="mt-1 divide-y divide-line overflow-hidden rounded-xl ring-1 ring-line">
           {shown.items.map((item) => {
             const active = selected?.storeProductId === item.storeProductId;
             return (
@@ -96,7 +102,7 @@ export default function ProductSearch({ onTracked }) {
                   type="button"
                   onClick={() => pick(item)}
                   aria-pressed={active}
-                  className={`flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-left transition-colors hover:bg-surface-2 ${active ? 'bg-surface-2' : ''}`}
+                  className={`flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-2/60 ${active ? 'bg-accent-soft shadow-[inset_3px_0_0_var(--accent)]' : ''}`}
                 >
                   <span className="font-medium">{item.name}</span>
                   <span className="text-xs text-muted">{item.brand} · {item.category} · #{item.storeProductId}</span>
@@ -108,7 +114,7 @@ export default function ProductSearch({ onTracked }) {
       )}
 
       {selected && (
-        <div className="mt-5 rounded-lg bg-page p-4 ring-1 ring-line">
+        <div className="mt-5 rounded-xl bg-surface-2/50 p-5 ring-1 ring-line">
           {detail.status === 'loading' && <p className="text-sm text-muted">Loading options from the store…</p>}
           {detail.status === 'error' && <p className="text-sm text-critical-ink">{detail.message}</p>}
           {product && (
@@ -129,7 +135,7 @@ export default function ProductSearch({ onTracked }) {
                       onClick={() => { setOptionKey(o.key); setTrackState({ status: 'idle' }); }}
                       aria-pressed={optionKey === o.key}
                       className={`rounded-full px-3.5 py-1.5 text-sm ring-1 transition-colors ${
-                        optionKey === o.key ? 'bg-accent text-accent-ink ring-accent' : 'bg-surface ring-line hover:bg-surface-2'
+                        optionKey === o.key ? 'bg-accent font-medium text-accent-ink ring-accent shadow-sm shadow-accent/30' : 'bg-surface ring-line hover:ring-accent/40'
                       }`}
                     >
                       {o.label}
@@ -143,7 +149,7 @@ export default function ProductSearch({ onTracked }) {
                   type="button"
                   onClick={track}
                   disabled={!optionKey || trackState.status === 'saving'}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
                 >
                   {trackState.status === 'saving' ? 'Adding…' : 'Track this option'}
                 </button>

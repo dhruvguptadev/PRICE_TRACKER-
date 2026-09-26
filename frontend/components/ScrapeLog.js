@@ -6,12 +6,12 @@ const SOURCE_LABEL = { cron: 'Scheduled', manual: 'Manual', initial: 'Initial', 
 /** Every attempt, newest first, including retries and final failures. */
 export default function ScrapeLog({ items, currency }) {
   if (!items.length) {
-    return <p className="rounded-xl bg-surface p-6 text-center text-sm text-muted ring-1 ring-line">No scrape attempts yet.</p>;
+    return <p className="card rounded-2xl bg-surface p-6 text-center text-sm text-muted">No scrape attempts yet.</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-xl bg-surface ring-1 ring-line">
+    <div className="card relative overflow-x-auto rounded-2xl bg-surface">
       <table className="w-full min-w-[720px] text-sm">
-        <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+        <thead className="border-b border-line bg-surface-2/60 text-left text-xs text-muted">
           <tr>
             <th scope="col" className="px-4 py-3 font-medium">Started</th>
             <th scope="col" className="px-4 py-3 font-medium">Run</th>
@@ -24,7 +24,7 @@ export default function ScrapeLog({ items, currency }) {
         </thead>
         <tbody className="divide-y divide-line">
           {items.map((a) => (
-            <tr key={a.id} className={a.outcome === 'failed' ? 'bg-critical/5' : undefined}>
+            <tr key={a.id} className={a.outcome === 'failed' ? 'bg-critical/5' : a.outcome === 'retried' ? 'bg-warning/5' : undefined}>
               <td className="px-4 py-2.5 whitespace-nowrap">{formatDateTime(a.startedAt)}</td>
               <td className="px-4 py-2.5 text-ink-2" title={a.runKey}>{SOURCE_LABEL[a.triggerSource] ?? a.triggerSource}</td>
               <td className="tabular px-4 py-2.5 text-right text-ink-2">#{a.attemptNumber}</td>

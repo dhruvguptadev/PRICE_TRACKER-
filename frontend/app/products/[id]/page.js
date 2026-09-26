@@ -48,28 +48,30 @@ export default function TrackedProductPage({ params }) {
   const compactPrice = (v) => (v >= 1e5 ? `₹${(v / 1e5).toFixed(v % 1e5 ? 1 : 0)}L` : v >= 1e3 ? `₹${(v / 1e3).toFixed(v % 1e3 ? 1 : 0)}k` : `₹${v}`);
 
   return (
-    <div className="space-y-6">
-      <Link href="/dashboard" className="text-sm text-accent hover:underline">← All tracked products</Link>
+    <div className="space-y-8">
+      <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-2 hover:text-accent">← All tracked products</Link>
 
-      <header className="rounded-xl bg-surface p-5 ring-1 ring-line">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">{p.productName}</h1>
-            <p className="mt-0.5 text-sm text-ink-2">
-              {p.optionAxis}: <strong className="text-ink">{p.selectedOption}</strong> · Product #{p.storeProductId}
-              {!p.active && <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-xs">Not tracked anymore</span>}
-            </p>
+      <header className="card overflow-hidden rounded-2xl bg-surface">
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{p.productName}</h1>
+              <p className="mt-1.5 text-sm text-ink-2">
+                {p.optionAxis}: <strong className="text-ink">{p.selectedOption}</strong> · Product #{p.storeProductId}
+                {!p.active && <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-xs">Not tracked anymore</span>}
+              </p>
+            </div>
+            <a href={p.productUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-surface px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-line transition-colors hover:bg-surface-2">View on store ↗</a>
           </div>
-          <a href={p.productUrl} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">View on store ↗</a>
         </div>
 
-        <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
           <Stat label="Current price" value={formatPrice(p.currentPrice, p.currency)} sub={p.currentMrp ? `MRP ${formatPrice(p.currentMrp, p.currency)}` : null} />
           <Stat label="Stock" value={formatStock(p.stockQty)} />
           <Stat label="Last successful check" value={timeAgo(p.lastSuccessAt)} sub={formatDateTime(p.lastSuccessAt)} />
-          <div>
+          <div className="bg-surface px-5 py-4 sm:px-6">
             <dt className="text-xs text-muted">Last attempt</dt>
-            <dd className="mt-1"><StatusBadge outcome={p.lastOutcome ?? 'pending'} /></dd>
+            <dd className="mt-1.5"><StatusBadge outcome={p.lastOutcome ?? 'pending'} /></dd>
             <dd className="mt-1 text-xs text-muted">
               {p.summary.successes}/{p.summary.attempts} attempts succeeded
               {p.consecutiveFailures > 0 && <> · {p.consecutiveFailures} failed in a row</>}
@@ -78,23 +80,23 @@ export default function TrackedProductPage({ params }) {
         </dl>
 
         {lastFailed && p.currentPrice !== null && (
-          <p className="mt-4 rounded-lg bg-warning/15 px-3 py-2 text-sm text-warning-ink ring-1 ring-inset ring-warning/40">
+          <p className="m-5 rounded-lg bg-warning/15 px-3 py-2 text-sm text-warning-ink ring-1 ring-inset ring-warning/40">
             <span aria-hidden="true">! </span>The latest check failed. The price shown is the last verified value from {formatDateTime(p.lastSuccessAt)}.
           </p>
         )}
       </header>
 
-      <section aria-labelledby="history-heading" className="space-y-3">
+      <section aria-labelledby="history-heading" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="history-heading" className="text-lg font-semibold">History</h2>
-          <div role="tablist" aria-label="History view" className="inline-flex rounded-lg p-0.5 ring-1 ring-line">
+          <h2 id="history-heading" className="text-xl font-semibold">History</h2>
+          <div role="tablist" aria-label="History view" className="inline-flex rounded-full bg-surface-2 p-1 ring-1 ring-line">
             {['chart', 'table'].map((v) => (
               <button
                 key={v}
                 role="tab"
                 aria-selected={view === v}
                 onClick={() => setView(v)}
-                className={`rounded-md px-3 py-1 text-sm capitalize ${view === v ? 'bg-surface-2 font-medium' : 'text-ink-2'}`}
+                className={`rounded-full px-3.5 py-1 text-sm capitalize transition-colors ${view === v ? 'bg-surface font-medium text-ink shadow-sm ring-1 ring-line' : 'text-ink-2 hover:text-ink'}`}
               >
                 {v}
               </button>
@@ -125,10 +127,10 @@ export default function TrackedProductPage({ params }) {
         )}
       </section>
 
-      <section aria-labelledby="log-heading" className="space-y-3">
+      <section aria-labelledby="log-heading" className="space-y-4">
         <div>
-          <h2 id="log-heading" className="text-lg font-semibold">Scrape log</h2>
-          <p className="text-sm text-ink-2">
+          <h2 id="log-heading" className="text-xl font-semibold">Scrape log</h2>
+          <p className="mt-1 text-sm text-ink-2">
             Every attempt is listed. <em>Retried</em> means that attempt failed and another followed; <em>Failed</em> means the final attempt failed, so no price was recorded.
           </p>
         </div>
@@ -140,20 +142,20 @@ export default function TrackedProductPage({ params }) {
 
 function Stat({ label, value, sub }) {
   return (
-    <div>
+    <div className="bg-surface px-5 py-4 sm:px-6">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-1 text-lg font-semibold">{value}</dd>
+      <dd className="tabular mt-1 text-xl font-semibold tracking-tight">{value}</dd>
       {sub && <dd className="text-xs text-muted">{sub}</dd>}
     </div>
   );
 }
 
 function HistoryTable({ history, currency }) {
-  if (!history.length) return <p className="rounded-xl bg-surface p-6 text-center text-sm text-muted ring-1 ring-line">No successful observations yet.</p>;
+  if (!history.length) return <p className="card rounded-2xl bg-surface p-6 text-center text-sm text-muted">No successful observations yet.</p>;
   return (
-    <div className="overflow-x-auto rounded-xl bg-surface ring-1 ring-line">
+    <div className="card relative overflow-x-auto rounded-2xl bg-surface">
       <table className="w-full min-w-[480px] text-sm">
-        <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+        <thead className="border-b border-line bg-surface-2/60 text-left text-xs text-muted">
           <tr>
             <th scope="col" className="px-4 py-3 font-medium">Captured</th>
             <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>

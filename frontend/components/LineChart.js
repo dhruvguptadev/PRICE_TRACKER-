@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { formatShort, formatDateTime } from '@/lib/format';
 
 const HEIGHT = 220;
@@ -31,6 +31,7 @@ export default function LineChart({ title, description, points, formatValue, for
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(640);
   const [active, setActive] = useState(null); // index of hovered point
+  const fillId = `area-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -42,7 +43,7 @@ export default function LineChart({ title, description, points, formatValue, for
 
   if (!points.length) {
     return (
-      <figure ref={wrapRef} className="rounded-xl bg-surface p-5 ring-1 ring-line">
+      <figure ref={wrapRef} className="card rounded-2xl bg-surface p-5 sm:p-6">
         <figcaption className="font-semibold">{title}</figcaption>
         <p className="mt-6 mb-4 text-center text-sm text-muted">No successful observations yet.</p>
       </figure>
@@ -101,7 +102,7 @@ export default function LineChart({ title, description, points, formatValue, for
   const tooltipLeft = a ? Math.min(Math.max(a.px, 90), width - 90) : 0;
 
   return (
-    <figure ref={wrapRef} className="rounded-xl bg-surface p-5 ring-1 ring-line">
+    <figure ref={wrapRef} className="card rounded-2xl bg-surface p-5 sm:p-6">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="font-semibold">{title}</span>
         <span className="text-sm text-ink-2">
@@ -121,6 +122,12 @@ export default function LineChart({ title, description, points, formatValue, for
           onBlur={() => setActive(null)}
           className="block touch-none rounded outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
+          <defs>
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--series-1)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--series-1)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
           {yTicks.map((v) => (
             <g key={v}>
               <line x1={PAD.left} x2={width - PAD.right} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeWidth="1" />
@@ -143,6 +150,7 @@ export default function LineChart({ title, description, points, formatValue, for
             </text>
           ))}
 
+          <path d={`${path}V${PAD.top + plotH}H${x(tMin)}Z`} fill={`url(#${fillId})`} />
           <path d={path} fill="none" stroke="var(--series-1)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           {/* Markers only when sparse enough to read; always on the last point. */}
           {points.length <= 24 &&
