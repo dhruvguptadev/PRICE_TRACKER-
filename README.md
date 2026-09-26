@@ -191,13 +191,18 @@ cd backend
 npm test
 ```
 
-Test layers:
+What the tests cover (`backend/tests/`, 32 tests, no database or network needed):
 
-1. parser/validator unit tests using saved fixtures (`fixtures/`)
-2. retry/classification tests
-3. API integration tests
-4. database integration tests
-5. live-store smoke test (manual)
+| File | Covers |
+| --- | --- |
+| `normalize.test.js` | price and stock parsing: Indian digit grouping, zero-width/NBSP characters, fullwidth and native-script digits, all store stock wordings |
+| `validate.test.js` | extraction validation: sold out is a valid result, a garbled MRP is dropped instead of failing the scrape |
+| `domFixtures.test.js` | the real DOM-reading code in headless Chromium against saved product pages (`fixtures/`): hidden decoy prices, pending price, wrong option, rotated class names |
+| `classify.test.js` | error classification (retryable vs. permanent) and exponential backoff with bounded jitter |
+| `catalogSync.test.js` | catalog sync against a fake store with shuffled pages; reports an incomplete catalog instead of hiding it |
+| `csv.test.js` | CSV header, escaping, failed rows left blank, 2-hour UTC run slot |
+
+Not automated: API and database integration. Those are checked against the deployed service (`GET /api/health` reports database and scheduler status) and with a manual live-store run (`npm run scrape:headed`).
 
 ### CI/CD
 
