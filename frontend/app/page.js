@@ -52,12 +52,12 @@ export default function Landing() {
       <section className="relative isolate grid gap-12 pb-14 pt-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:pt-14">
         <div aria-hidden="true" className="bg-dots absolute inset-x-[-1rem] inset-y-0 -z-10 sm:inset-x-[-1.5rem]" />
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">Nightwatch · price &amp; stock tracker for the INE mock storefront</p>
-          <h1 className="mt-5 font-serif text-[2.9rem] leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.4rem]">
+          <p className="text-sm font-medium text-accent">Price &amp; stock tracker for the INE mock storefront</p>
+          <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-[3.5rem]">
             Checks the price every two hours.
-            <span className="block italic text-accent">Writes down every time it couldn’t.</span>
+            <span className="block text-ink-2">Writes down every time it couldn’t.</span>
           </h1>
-          <p className="mt-7 max-w-xl text-[1.05rem] leading-relaxed text-ink-2">
+          <p className="mt-6 max-w-xl text-base leading-7 text-ink-2 sm:text-[1.0625rem]">
             Pick a product and the exact option you care about: the walnut finish, not the oak. A headless browser opens the
             real product page on a schedule, gets past what the page puts in the way, and reads the price a customer would
             actually pay. If it can’t, that goes in the log too, and the last good price stays put.
@@ -82,7 +82,7 @@ export default function Landing() {
         {/* A page from the log, not an illustration of one. */}
         <figure className="overflow-hidden rounded-xl bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.12)] ring-1 ring-line">
           <figcaption className="flex items-center justify-between border-b border-line bg-surface-2/60 px-5 py-3">
-            <span className="font-mono text-xs uppercase tracking-[0.14em] text-muted">Scrape log</span>
+            <span className="text-sm font-medium text-ink">Scrape log</span>
             <span className="text-xs text-muted">25–26 Sep 2026, IST</span>
           </figcaption>
           <ol className="divide-y divide-line">
@@ -105,7 +105,7 @@ export default function Landing() {
                     ) : (
                       <span className="text-xs text-ink-2">{row.note}</span>
                     )}
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-px font-mono text-[11px] ring-1 ring-inset ${o.cls}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-px text-xs font-medium capitalize ring-1 ring-inset ${o.cls}`}>
                       <span aria-hidden="true">{o.mark}</span>
                       {row.outcome}
                     </span>
@@ -128,7 +128,7 @@ export default function Landing() {
           <div key={label} className="bg-page px-4 py-6 first:pl-0 sm:px-6 lg:[&:nth-child(3)]:pl-6 [&:nth-child(3)]:pl-0">
             <dt className="sr-only">{label}</dt>
             <dd>
-              <span className="tabular block font-serif text-4xl leading-none sm:text-5xl">{value}</span>
+              <span className="tabular block text-3xl font-semibold leading-none tracking-tight sm:text-4xl">{value}</span>
               <span className="mt-2 block text-sm text-ink-2">{label}</span>
             </dd>
           </div>
@@ -255,14 +255,14 @@ export default function Landing() {
               <li key={title} className="relative grid grid-cols-[2.25rem_1fr] gap-4 pb-7 last:pb-0">
                 {!last && <span aria-hidden="true" className="absolute left-[1.125rem] top-9 bottom-0 w-px -translate-x-1/2 bg-line" />}
                 <span
-                  className={`tabular grid h-9 w-9 place-items-center rounded-full font-mono text-xs ring-1 ${
+                  className={`tabular grid h-9 w-9 place-items-center rounded-full text-xs font-medium ring-1 ${
                     last ? 'bg-accent text-accent-ink ring-accent' : 'bg-surface text-ink-2 ring-line'
                   }`}
                 >
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <div className="pt-1.5">
-                  <h3 className="font-medium text-ink">{title}</h3>
+                  <h3 className="font-semibold text-ink">{title}</h3>
                   <p className="mt-1 text-[0.95rem] leading-relaxed text-ink-2">{body}</p>
                 </div>
               </li>
@@ -323,7 +323,7 @@ export default function Landing() {
       {/* ── Closing CTA ──────────────────────────────────────── */}
       <section className="mb-14 flex flex-col items-start justify-between gap-6 rounded-xl bg-accent-soft px-6 py-10 ring-1 ring-accent/15 sm:flex-row sm:items-center sm:px-10">
         <div>
-          <h2 className="font-serif text-3xl leading-tight sm:text-4xl">See what it found today.</h2>
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">See what it found today.</h2>
           <p className="mt-2 text-sm text-ink-2">Search the catalogue, track an option, and watch the history build up.</p>
         </div>
         <Link
@@ -350,8 +350,8 @@ export default function Landing() {
 function SectionHead({ n, title, children }) {
   return (
     <header className="max-w-2xl">
-      <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">{n}</p>
-      <h2 className="mt-3 font-serif text-4xl leading-tight sm:text-[2.75rem]">{title}</h2>
+      <p className="tabular text-sm font-medium text-accent">{n}</p>
+      <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.025em] sm:text-4xl">{title}</h2>
       {children && <p className="mt-4 text-sm leading-relaxed text-ink-2 sm:text-[0.95rem]">{children}</p>}
     </header>
   );
@@ -363,7 +363,7 @@ function Trap({ n, title, specimen, className = '', children }) {
       <div className="flex min-h-16 items-center border-b border-dashed border-line px-5 py-4">{specimen}</div>
       <div className="flex-1 p-5">
         <h3 className="flex items-baseline gap-2.5 text-base font-semibold">
-          <span className="font-serif text-xl font-normal leading-none text-accent">{n}</span>
+          <span className="tabular text-sm font-semibold text-accent">{n}</span>
           {title}
         </h3>
         <p className="mt-2 text-[0.93rem] leading-relaxed text-ink-2">{children}</p>
@@ -375,8 +375,8 @@ function Trap({ n, title, specimen, className = '', children }) {
 function Rule({ term, children }) {
   return (
     <div className="rounded-xl bg-surface p-5 ring-1 ring-line">
-      <dt className="flex items-baseline gap-2 font-serif text-2xl italic leading-tight">
-        <span aria-hidden="true" className="font-sans text-sm not-italic text-critical-ink">✕</span>
+      <dt className="flex items-baseline gap-2 text-base font-semibold leading-snug">
+        <span aria-hidden="true" className="text-sm text-critical-ink">✕</span>
         {term}
       </dt>
       <dd className="mt-3 text-[0.93rem] leading-relaxed text-ink-2">{children}</dd>

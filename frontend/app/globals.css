@@ -44,14 +44,22 @@
   --color-warning-ink: var(--warning-ink);
   --color-critical: var(--critical);
   --color-critical-ink: var(--critical-ink);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-serif: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
 body {
   background: var(--page);
   color: var(--ink);
+  /* Inter's straight-sided 1, open 4/6/9 and single-storey tails read cleaner in dense UI. */
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 /* Faint dot grid behind the landing hero, fading out towards the bottom. */
