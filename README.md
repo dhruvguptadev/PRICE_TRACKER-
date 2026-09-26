@@ -1,5 +1,7 @@
 # Nightwatch
 
+[![CI](https://github.com/bipul724/price-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/bipul724/price-tracker/actions/workflows/ci.yml)
+
 **Mock Storefront — Product Search & Scheduled Price Tracker.** Checks the price every two hours. Writes down every time it couldn't.
 
 A full-stack price/stock tracker for the provided mock storefront:
@@ -196,6 +198,20 @@ Test layers:
 3. API integration tests
 4. database integration tests
 5. live-store smoke test (manual)
+
+### CI/CD
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `main` and every pull request:
+
+| Job | What it checks |
+| --- | --- |
+| Backend tests | `npm ci` (includes `prisma generate`), headless Chromium, `npm test` |
+| Frontend lint and build | `npm run lint`, `npm run build` |
+| Backend Docker image | builds `backend/Dockerfile` without pushing, so a broken image fails here instead of on Render |
+
+CI needs no secrets: `prisma generate` doesn't need a database connection, and the tests run against saved fixtures.
+
+Deployment uses the hosts' GitHub integrations: Vercel deploys `frontend/` and Render deploys `backend/` when `main` changes.
 
 ## Scraping Schedule
 
