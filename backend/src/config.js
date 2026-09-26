@@ -24,6 +24,10 @@ export const config = {
   schedulerStaleMs: 150 * 60 * 1000,
   // Runs left `running` longer than this are closed as `failed` by the next run.
   stuckRunMs: 30 * 60 * 1000,
+  // On SIGTERM/SIGINT, how long to wait for an in-flight scrape batch to finish before
+  // closing the DB pool anyway (a deploy mid-scrape used to close the pool immediately,
+  // crashing the batch with "Cannot use a pool after calling end on the pool").
+  shutdownDrainMs: int('SHUTDOWN_DRAIN_MS', 45_000),
 };
 
 export const productUrl = (storeProductId) => `${config.storeBaseUrl}/item/${storeProductId}`;

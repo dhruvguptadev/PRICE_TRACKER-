@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { createApp } from './app.js';
 import { closePool } from './db/pool.js';
 import { ensureCatalog } from './services/catalogService.js';
+import { scrapeQueueDepth, waitForQueueDrain } from './services/scrapeService.js';
 
 const app = createApp();
 const server = app.listen(config.port, () => {
@@ -16,8 +17,14 @@ const server = app.listen(config.port, () => {
 
 function shutdown(signal) {
   console.log(`[server] ${signal} received, shutting down`);
-  server.close(() => closePool().finally(() => process.exit(0)));
-  setTimeout(() => process.exit(1), 10_000).unref();
+  server.close(async () => {
+    if (scrapeQueueDepth() > 0) {
+      console.log(`[server] waiting up to ${config.shutdownDrainMs}ms for in-flight scrape to finish`);
+      await waitForQueueDrain(config.shutdownDrainMs);
+    }
+    await closePool().finally(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(1), config.shutdownDrainMs + 10_000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

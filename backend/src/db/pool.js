@@ -20,7 +20,7 @@ export function getPool() {
     });
     // Prisma's pg adapter drops the offset of timestamptz values when the session isn't UTC
     // (reads came back shifted by +05:30 on an IST server), so pin every connection to UTC.
-    pool.on('error', (err) => console.error('[db] idle client error', err.message));
+    pool.on('error', (err) => console.error('[db] idle client error:', err));
   }
   return pool;
 }

@@ -34,6 +34,14 @@ function enqueue(job) {
 
 export const scrapeQueueDepth = () => pendingJobs;
 
+/** Resolves once no scrape job is in flight, or `maxMs` elapses — whichever comes first. */
+export async function waitForQueueDrain(maxMs) {
+  const start = Date.now();
+  while (pendingJobs > 0 && Date.now() - start < maxMs) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Triggers
 // ---------------------------------------------------------------------------
