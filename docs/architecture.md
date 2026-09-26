@@ -290,7 +290,8 @@ One target's failure must not abort the batch. Each target gets a fresh browser 
 ## 7. Scheduler and Free-Tier Behavior
 
 ```text
-cron-job.org  :55 odd hours  GET /api/health          → wakes Render (cold start ~50 s)
+cron-job.org  every 10 min   GET /api/health          → keeps Render awake (no idle sleep)
+UptimeRobot   every 5 min    GET /api/health          → backup ping + downtime email
 cron-job.org  :00 even hours POST /api/scrape/run     → instance already warm
    ↓ 202 Accepted immediately
 background batch → Playwright → Supabase
@@ -298,8 +299,9 @@ background batch → Playwright → Supabase
 
 Constraints that shape this:
 
-- **cron-job.org timeout (~30 s):** shorter than both a cold start and a batch. The warm-up ping 5 minutes earlier absorbs the cold start (the brief: "keep the instance warm if needed"). The scrape endpoint then responds `202` and runs in the background.
-- **Render free sleeps after ~15 min idle:** the warm-up + scrape requests keep it awake long enough for the batch to finish.
+- **cron-job.org timeout (~30 s):** shorter than both a cold start and a batch. The instance is kept warm (the brief: "keep the instance warm if needed"), so the scrape call never waits on a cold start. The scrape endpoint then responds `202` and runs in the background.
+- **Render free sleeps after ~15 min idle:** a single warm-up ping 5 minutes before each scrape was the first design. In production the logs showed the instance being stopped (`SIGTERM`) ~15 minutes after every start, so it now gets a health ping every 10 minutes and never goes idle. One always-on free service fits within Render's monthly free hours.
+- **Restarts mid-batch:** on `SIGTERM` the server stops accepting requests and waits up to 45 s for an in-flight scrape before closing the database pool. A batch that still gets cut off is closed as `failed` by the next run.
 - **512 MB RAM:** one Chromium, sequential targets, new context per target, browser always closed in `finally`. Block images/fonts to save memory.
 - **Supabase direct connection is IPv6-only; Render has no outbound IPv6:** connect via the Supabase **session pooler** string.
 

@@ -60,7 +60,7 @@ Error:
 
 ### GET `/api/health`
 
-Deployment health check. Also the cron-job.org warm-up target 5 minutes before each scrape. `schedulerStale` is `true` when no cron run has started in the last 2 h 30 min; the dashboard shows a warning when it is.
+Deployment health check. Also the keep-awake target: cron-job.org pings it every 10 minutes and UptimeRobot every 5. `schedulerStale` is `true` when no cron run has started in the last 2 h 30 min; the dashboard shows a warning when it is.
 
 ```json
 {

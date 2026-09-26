@@ -33,7 +33,7 @@
 | "Don't retry selector misses / malformed extraction" | Misses are mostly transient here (late content, dropped hover events, rotating classes), and the brief says to recover when a page shifts | Retry with fresh page + fresh manifest; `STRUCTURE_CHANGED` if persistent |
 | Frontend documented as React + Vite (`VITE_API_BASE_URL`) | Repo uses Next.js 16 | Docs switched to Next.js, `NEXT_PUBLIC_API_BASE_URL` |
 | `SUPABASE_DATABASE_URL` direct connection | Supabase direct connection is IPv6-only; Render can't reach it | Use the session pooler connection string |
-| Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch, plus a warm-up ping 5 min earlier for the cold start |
+| Scheduler endpoint may run synchronously | cron-job.org times out ~30 s; cold start + Playwright is longer | Always `202` + background batch, with the instance kept warm (see Decision 005) |
 | No detection of missed/stuck runs | Brief says "never silently stop" | `schedulerStale` in health + dashboard banner; stuck runs closed as `failed` |
 
 Implementation-time corrections (found by driving the real page):
@@ -51,6 +51,8 @@ Implementation-time corrections (found by driving the real page):
 | Prisma handles timestamps transparently | With a non-UTC database session, `@prisma/adapter-pg` shifted `timestamptz` reads/writes by the session offset (+05:30 locally) | Pin every connection to `TimeZone=UTC` via the pool's startup options |
 | The page's manifest is available once the heading renders | Sometimes still in flight, so the scraper had no class map | Explicitly await the page's manifest response |
 | "Panel ready but price selector missing" means the page shifted | Live run: the manifest-classed element *was* present but never settled; logged as `STRUCTURE_CHANGED` | Report it as `PRICE_NOT_READY` with opacity/text diagnostics; keep `STRUCTURE_CHANGED` for a truly missing element |
+| One warm-up ping 5 min before each scrape keeps Render awake long enough | Render logs showed `SIGTERM` ~15 min after every start, and cron-job.org reported the scrape job as `Failed (output too large)` | Health ping every 10 min (plus UptimeRobot every 5 min) so the instance never idles; the scrape job now gets `202 Accepted` |
+| Shutting down on `SIGTERM` can close the DB pool immediately | A deploy during a batch crashed it with `Cannot use a pool after calling end on the pool` | On `SIGTERM`, wait up to 45 s (`SHUTDOWN_DRAIN_MS`) for the in-flight scrape before closing the pool |
 | Prices use ASCII digits | First live scrapes on Render: the store rendered `₹３６,５５６` in fullwidth digits; the strict parser rejected it (correctly) and only the retry succeeded | Fold fullwidth (NFKC) and native-script digits to ASCII before parsing; still reject anything that isn't exactly one amount |
 
 ---
@@ -89,9 +91,9 @@ Implementation-time corrections (found by driving the real page):
 
 ## Decision 005 — External scheduler with async trigger
 
-**Decision:** cron-job.org calls `POST /api/scrape/run` every 2 hours with a bearer secret. The endpoint returns `202` and runs the batch in the background. A second job pings `GET /api/health` 5 minutes earlier to wake the instance.
+**Decision:** cron-job.org calls `POST /api/scrape/run` every 2 hours with a bearer secret. The endpoint returns `202` and runs the batch in the background. A second job pings `GET /api/health` every 10 minutes so the instance never sleeps, and an UptimeRobot monitor pings it every 5 minutes as a backup that also emails on downtime.
 
-**Why:** Free Render instances sleep and cold-start in ~50 s. cron-job.org times out after ~30 s. Without the warm-up, the scrape request can time out before the app even starts. The brief says to "keep the instance warm if needed".
+**Why:** Free Render instances sleep after ~15 min idle and cold-start in ~50 s. cron-job.org times out after ~30 s. The first version pinged once, 5 minutes before each scrape, but production logs showed the instance being stopped every ~15 minutes, so it is now kept awake continuously. The brief says to "keep the instance warm if needed".
 
 **Trade-off:** External dependency. Mitigated by the secret, idempotent `run_key`, and the visible run history.
 

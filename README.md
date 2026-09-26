@@ -192,14 +192,15 @@ POST https://price-tracker-api-rqd5.onrender.com/api/scrape/run
 Authorization: Bearer <SCRAPE_TRIGGER_SECRET>
 ```
 
-Two cron-job.org jobs handle Render's free-tier sleep:
+Two cron-job.org jobs keep the service running on Render's free tier, plus an UptimeRobot monitor as a backup:
 
 | Job | Schedule (UTC) | Request |
 |---|---|---|
-| Warm-up | `55 1-23/2 * * *` (5 min before each scrape) | `GET /api/health` |
-| Scrape | `0 */2 * * *` | `POST /api/scrape/run` with bearer secret |
+| Warm-up (cron-job.org) | every 10 minutes | `GET /api/health` |
+| Scrape (cron-job.org) | `0 */2 * * *` | `POST /api/scrape/run` with bearer secret |
+| Uptime monitor (UptimeRobot) | every 5 minutes | `GET /api/health`, emails on downtime |
 
-- A sleeping Render instance takes ~50 s to wake, which is longer than cron-job.org's ~30 s timeout. The warm-up ping wakes it first, and the instance stays awake for ~15 minutes.
+- Render's free tier stops the instance after ~15 minutes without traffic, and a cold start takes ~50 s, longer than cron-job.org's ~30 s timeout. A health ping every 10 minutes keeps the instance awake all the time, so the scrape call always lands on a warm instance and a batch is never cut off by an idle shutdown.
 - The scrape endpoint responds `202 Accepted` immediately and runs the batch in the background, because a Playwright batch also takes longer than 30 s.
 - Runs are keyed by their 2-hour slot, so a duplicate trigger cannot create a duplicate run.
 
@@ -207,7 +208,8 @@ Two cron-job.org jobs handle Render's free-tier sleep:
 
 - `GET /api/health` reports the last scheduled run and `schedulerStale: true` when no cron run has started for more than 2 h 30 min. The dashboard shows a warning banner in that case.
 - A run left `running` by a crash or restart is closed as `failed` at the start of the next run.
-- cron-job.org failure notifications are enabled for both jobs.
+- cron-job.org failure notifications are enabled for both jobs, and UptimeRobot emails if `/api/health` stops answering.
+- On a deploy or restart (`SIGTERM`), the server waits up to 45 s (`SHUTDOWN_DRAIN_MS`) for an in-flight scrape to finish before closing the database pool.
 
 Do not rely on `setInterval()` inside the web server as the scheduler — the free instance sleeps.
 
@@ -304,7 +306,7 @@ Render free instances have 512 MB RAM, so the scraper runs one browser and one t
 Warm-up job:
 
 - URL: `https://price-tracker-api-rqd5.onrender.com/api/health`, method `GET`
-- Schedule: 5 minutes before each scrape (`55 1-23/2 * * *`)
+- Schedule: every 10 minutes (keeps the free instance from sleeping)
 
 Scrape job:
 
@@ -313,6 +315,8 @@ Scrape job:
 - Schedule: every 2 hours (`0 */2 * * *`)
 
 Enable failure notifications on both jobs.
+
+Optional backup: an UptimeRobot HTTP(s) monitor on `/api/health` every 5 minutes, with email alerts.
 
 ## Headed Mode
 

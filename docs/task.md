@@ -54,9 +54,9 @@ Build in vertical slices instead of completing the frontend first:
 
 ## 5. Phase 2 — Supabase Database
 
-- [ ] Create Supabase project.
+- [x] Create Supabase project.
 - [x] Write `backend/db/schema.sql` from `database.md` §9 and run it.
-- [ ] Connect via **session pooler** string (`DATABASE_URL`).
+- [x] Connect via **session pooler** string (`DATABASE_URL`).
 - [x] Test success transaction (attempt + observation + current state).
 - [x] Test failed attempt leaves current state unchanged.
 - [x] Verify CHECK blocks price on non-success attempts.
@@ -136,20 +136,21 @@ Build in vertical slices instead of completing the frontend first:
 
 ### Render
 
-- [ ] Web service, root `backend/`.
-- [ ] Build: `npm install && npx playwright install --with-deps chromium`.
-- [ ] Start: `npm start`.
-- [ ] Env vars set.
-- [ ] `/api/health` OK; catalog synced 960/960.
-- [ ] Manual scrape succeeds on Render (check memory in Render metrics).
+- [x] Web service, root `backend/`.
+- [x] Build: `npm install && npx playwright install --with-deps chromium`.
+- [x] Start: `npm start`.
+- [x] Env vars set.
+- [x] `/api/health` OK; catalog synced 960/960.
+- [x] Manual scrape succeeds on Render (check memory in Render metrics).
 
 ### cron-job.org
 
-- [ ] Warm-up job: `GET /api/health` at `55 1-23/2 * * *` (5 min before each scrape).
-- [ ] Scrape job: `POST https://<render>.onrender.com/api/scrape/run`, header `Authorization: Bearer …`, `0 */2 * * *`.
+- [x] Warm-up job: `GET /api/health` every 10 minutes (was `55 1-23/2 * * *`; Render still slept every ~15 min, so it now never idles).
+- [x] Backup monitor: UptimeRobot on `/api/health` every 5 minutes with email alerts.
+- [x] Scrape job: `POST https://<render>.onrender.com/api/scrape/run`, header `Authorization: Bearer …`, `0 */2 * * *`.
 - [ ] Enable failure notifications on both jobs.
-- [ ] Trigger once manually; confirm `202` and rows in `scrape_runs` / `scrape_attempts`.
-- [ ] Track 2–3 products so unattended history starts accumulating.
+- [x] Trigger once manually; confirm `202` and rows in `scrape_runs` / `scrape_attempts`.
+- [x] Track 2–3 products so unattended history starts accumulating.
 
 ## 11. Phase 8 — Frontend (Next.js)
 
@@ -177,18 +178,18 @@ Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
 
 ### Vercel
 
-- [ ] Import repo, root `frontend/`, Next.js preset.
-- [ ] Set `NEXT_PUBLIC_API_BASE_URL`.
-- [ ] Update backend `FRONTEND_ORIGIN`.
+- [x] Import repo, root `frontend/`, Next.js preset.
+- [x] Set `NEXT_PUBLIC_API_BASE_URL`.
+- [x] Update backend `FRONTEND_ORIGIN`.
 
 ## 12. Phase 9 — Production Validation
 
-- [ ] 2–3 products/options tracked.
-- [ ] Several scheduled (unattended) runs recorded.
+- [x] 2–3 products/options tracked.
+- [x] Several scheduled (unattended) runs recorded.
 - [ ] Chart/table data correct against the store in a browser.
-- [ ] Logs show retries/failures honestly.
-- [ ] CSV: failed/retried rows have blank price/stock; timestamps ISO UTC; opens in a spreadsheet.
-- [ ] Last successful state unchanged after a failure.
+- [x] Logs show retries/failures honestly.
+- [x] CSV: failed/retried rows have blank price/stock; timestamps ISO UTC; opens in a spreadsheet.
+- [x] Last successful state unchanged after a failure.
 
 ## 13. Phase 10 — Reliability Test Matrix
 
@@ -206,7 +207,7 @@ Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
 | Option no longer offered | `failed` immediately (`OPTION_NOT_FOUND`) |
 | One target fails in batch | remaining targets continue |
 | Duplicate cron trigger in same slot | `200 duplicate`, no new run |
-| Backend asleep before scrape | warm-up ping wakes it; scrape call returns `202` within 30 s |
+| Backend asleep before scrape | kept awake by a 10-minute health ping; scrape call returns `202` within 30 s |
 | Scheduler stops firing | `schedulerStale = true`, dashboard banner, cron-job.org email |
 | Instance restarts mid-batch | stuck run closed as `failed` by next run |
 | Stock text in any of the 5 wordings | integer extracted correctly |
@@ -225,23 +226,23 @@ Read `frontend/AGENTS.md` first. Next.js 16 has breaking changes.
 ## 15. Phase 12 — Documentation
 
 - [x] Docs updated with store inspection results.
-- [ ] `decision.md` design note: add real implementation-time AI mistakes and fixes.
+- [x] `decision.md` design note: add real implementation-time AI mistakes and fixes.
 - [ ] README setup tested from a clean clone.
-- [ ] README: live URLs filled in.
+- [x] README: live URLs filled in.
 
 ## 16. Final Submission Checklist
 
-- [ ] Live Vercel URL works.
-- [ ] Render API reachable.
-- [ ] Supabase contains tracked data.
-- [ ] 2–3 tracked products/options exist.
-- [ ] History contains real unattended/scheduled records.
-- [ ] Scrape log contains failures/retries where they happened.
-- [ ] CSV export works.
+- [x] Live Vercel URL works.
+- [x] Render API reachable.
+- [x] Supabase contains tracked data.
+- [x] 2–3 tracked products/options exist.
+- [x] History contains real unattended/scheduled records.
+- [x] Scrape log contains failures/retries where they happened.
+- [x] CSV export works.
 - [ ] Headed demo video recorded (2–4 min).
-- [ ] Public GitHub repository accessible.
-- [ ] README contains setup, schedule, env vars.
-- [ ] Design note explains reliability, trade-offs, AI mistakes/corrections.
+- [x] Public GitHub repository accessible.
+- [x] README contains setup, schedule, env vars.
+- [x] Design note explains reliability, trade-offs, AI mistakes/corrections.
 - [ ] Resume PDF provided.
 
 ## 17. Priority Order Under Time Pressure
