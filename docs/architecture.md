@@ -15,27 +15,7 @@ The scraper lives inside the backend codebase but is split into independent modu
 
 ## 2. High-Level Diagram
 
-```mermaid
-flowchart TB
-    U[User Browser]
-    V[Vercel - Next.js Frontend]
-    A[Render - Express API]
-    S[cron-job.org\nevery 2 hours]
-    D[(Supabase PostgreSQL)]
-    CAT[Catalog Client\nHTTP JSON]
-    PW[Price Scraper\nPlaywright]
-    STORE[(Mock Storefront\ndemo.inelabteamdev.com)]
-
-    U --> V
-    V -->|HTTPS REST| A
-    A -->|Read/write via pooler| D
-    S -->|POST + bearer secret| A
-    A --> CAT
-    CAT -->|/api/v2/listings, /api/v2/items/:id| STORE
-    A --> PW
-    PW -->|/item/:id + hover challenge| STORE
-    A -->|Persist attempts + observations| D
-```
+![System architecture](./diagrams/architecture.svg)
 
 ## 3. Runtime Workflows
 
@@ -97,34 +77,7 @@ The initial scrape runs in the background so the request does not wait on Playwr
 
 ### 3.4 Scheduled Scrape Batch
 
-```mermaid
-sequenceDiagram
-    participant Cron as cron-job.org
-    participant API as Render API
-    participant DB as Supabase
-    participant Scraper
-    participant Store as Mock Store
-
-    Cron->>API: POST /api/scrape/run + secret
-    API->>DB: Insert scrape_runs(run_key = 2h slot) ON CONFLICT DO NOTHING
-    API-->>Cron: 202 Accepted (or 200 "already ran" for duplicate slot)
-    API->>DB: Read active tracking targets
-    API->>Scraper: Launch one Chromium
-    loop Each tracked target (sequential)
-        loop attempt 1..3
-            Scraper->>Store: Open /item/:id, select option, hover, wait
-            alt Valid extraction
-                API->>DB: TX: attempt=success + observation + current state
-            else Transient failure, attempts remain
-                API->>DB: attempt=retried
-            else Final or permanent failure
-                API->>DB: attempt=failed, bump consecutive_failures
-            end
-        end
-    end
-    Scraper->>Scraper: Close browser (finally)
-    API->>DB: Finish scrape_runs with counts/status
-```
+![A scheduled run](./diagrams/scheduled-run.svg)
 
 ## 4. Service Boundaries
 
@@ -211,6 +164,8 @@ Reproducing steps 3a–c over plain HTTP would mean reverse-engineering obfuscat
 | Price + stock | Playwright | Gated behind browser challenge + hover |
 
 ### 5.3 Price Extraction Procedure (Playwright)
+
+![One scrape attempt](./diagrams/scrape-attempt.svg)
 
 1. Use the manifest **the page itself loaded** (captured from its `/api/v2/ui/manifest` response) → `classes.priceValue`, `classes.stock`, `classes.mrp`, `priceTag`, `revision`. A manifest fetched over HTTP at batch start is the fallback, so a rotation between our fetch and the page's cannot cause a mismatch.
 2. Open `/item/:id`; wait for the product name to match the tracked name.

@@ -39,6 +39,20 @@ Captured from the live deployment on 26 Sep 2026; all data shown is from real sc
 
 ![Product history and scrape log](docs/screenshots/product-history.png)
 
+## Architecture
+
+**System overview:** the browser loads the Next.js app from Vercel and calls the Express API on Render. cron-job.org triggers scrapes and keeps the free instance awake; UptimeRobot is a backup monitor. Search and options use the store's JSON API over plain HTTP; only price and stock need Playwright.
+
+![System architecture](docs/diagrams/architecture.svg)
+
+**A scheduled run:** the trigger returns `202` immediately and the batch runs in the background, one target at a time, logging every attempt.
+
+![A scheduled run](docs/diagrams/scheduled-run.svg)
+
+**One scrape attempt:** the steps the scraper takes on the real product page, and what happens when one of them fails.
+
+![One scrape attempt](docs/diagrams/scrape-attempt.svg)
+
 ## Tech Stack
 
 | Layer | Technology |
