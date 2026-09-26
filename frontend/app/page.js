@@ -51,11 +51,15 @@ export default function Landing() {
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section className="relative isolate grid gap-12 pb-14 pt-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:pt-14">
         <div aria-hidden="true" className="bg-dots absolute inset-x-[-1rem] inset-y-0 -z-10 sm:inset-x-[-1.5rem]" />
+        <div aria-hidden="true" className="hero-glow absolute -right-24 top-0 -z-10 h-[32rem] w-[40rem] max-w-full" />
         <div>
-          <p className="text-sm font-medium text-accent">Price &amp; stock tracker for the INE mock storefront</p>
-          <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-[3.5rem]">
+          <p className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-xs font-medium text-ink-2 shadow-sm ring-1 ring-line">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+            Price &amp; stock tracker for the INE mock storefront
+          </p>
+          <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-[3.5rem]">
             Checks the price every two hours.
-            <span className="block text-ink-2">Writes down every time it couldn’t.</span>
+            <span className="block text-accent">Writes down every time it couldn’t.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-ink-2 sm:text-[1.0625rem]">
             Pick a product and the exact option you care about: the walnut finish, not the oak. A headless browser opens the
@@ -65,7 +69,7 @@ export default function Landing() {
           <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/dashboard"
-              className="group inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong"
+              className="group inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-3 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong"
             >
               Open the dashboard
               <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -80,9 +84,12 @@ export default function Landing() {
         </div>
 
         {/* A page from the log, not an illustration of one. */}
-        <figure className="overflow-hidden rounded-xl bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.12)] ring-1 ring-line">
+        <figure className="overflow-hidden rounded-2xl bg-surface shadow-[0_1px_2px_rgba(15,23,42,0.04),0_24px_48px_-16px_rgba(15,23,42,0.18)] ring-1 ring-line">
           <figcaption className="flex items-center justify-between border-b border-line bg-surface-2/60 px-5 py-3">
-            <span className="text-sm font-medium text-ink">Scrape log</span>
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-good ring-4 ring-good/15" />
+              Scrape log
+            </span>
             <span className="text-xs text-muted">25–26 Sep 2026, IST</span>
           </figcaption>
           <ol className="divide-y divide-line">
@@ -123,13 +130,13 @@ export default function Landing() {
 
       {/* ── Numbers ──────────────────────────────────────────── */}
       {/* gap-px over a line-coloured background draws the dividers at any column count. */}
-      <dl className="grid grid-cols-2 gap-px border-y border-line bg-line lg:grid-cols-4">
+      <dl className="card grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-line lg:grid-cols-4">
         {STATS.map(([value, label]) => (
-          <div key={label} className="bg-page px-4 py-6 first:pl-0 sm:px-6 lg:[&:nth-child(3)]:pl-6 [&:nth-child(3)]:pl-0">
+          <div key={label} className="bg-surface px-5 py-7 sm:px-7">
             <dt className="sr-only">{label}</dt>
             <dd>
               <span className="tabular block text-3xl font-semibold leading-none tracking-tight sm:text-4xl">{value}</span>
-              <span className="mt-2 block text-sm text-ink-2">{label}</span>
+              <span className="mt-2.5 block text-sm text-muted">{label}</span>
             </dd>
           </div>
         ))}
@@ -235,13 +242,14 @@ export default function Landing() {
       </section>
 
       {/* ── One attempt ──────────────────────────────────────── */}
-      <section id="how" className="scroll-mt-20 grid gap-10 border-t border-line py-20 lg:grid-cols-[20rem_1fr] lg:gap-16">
+      <section id="how" className="relative isolate scroll-mt-20 grid gap-10 py-20 lg:grid-cols-[20rem_1fr] lg:gap-16">
+        <div aria-hidden="true" className="absolute inset-y-0 left-1/2 -z-10 w-screen -translate-x-1/2 border-y border-line bg-surface" />
         <div className="lg:sticky lg:top-8 lg:self-start">
           <SectionHead n="02" title="One attempt, start to finish">
             About seven seconds per product. Batches run one product at a time in a single Chromium, because the free server has
             512&nbsp;MB.
           </SectionHead>
-          <div className="mt-6 rounded-lg bg-surface p-4 text-sm leading-relaxed text-ink-2 ring-1 ring-line">
+          <div className="mt-6 rounded-xl bg-warning/10 p-4 text-sm leading-relaxed text-ink-2 ring-1 ring-warning/30">
             <span className="font-medium text-warning-ink">↻ If any step fails,</span> the attempt is logged as{' '}
             <Q>retried</Q> and the whole thing starts again on a fresh page, with a growing, jittered pause. After the third
             try it’s <Q>failed</Q>.
@@ -256,7 +264,7 @@ export default function Landing() {
                 {!last && <span aria-hidden="true" className="absolute left-[1.125rem] top-9 bottom-0 w-px -translate-x-1/2 bg-line" />}
                 <span
                   className={`tabular grid h-9 w-9 place-items-center rounded-full text-xs font-medium ring-1 ${
-                    last ? 'bg-accent text-accent-ink ring-accent' : 'bg-surface text-ink-2 ring-line'
+                    last ? 'bg-accent text-accent-ink ring-accent shadow-sm shadow-accent/30' : 'bg-accent-soft text-accent-strong ring-accent/15'
                   }`}
                 >
                   {String(i + 1).padStart(2, '0')}
@@ -272,7 +280,7 @@ export default function Landing() {
       </section>
 
       {/* ── Rules ────────────────────────────────────────────── */}
-      <section className="border-t border-line py-20">
+      <section className="py-20">
         <SectionHead n="03" title="What it won’t do" />
         <dl className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Rule term="Guess">
@@ -297,7 +305,7 @@ export default function Landing() {
         <SectionHead n="04" title="Take the data with you">
           One row per attempt, not per success. A retried or failed row has an empty price and stock, because nothing was read.
         </SectionHead>
-        <div className="min-w-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line">
+        <div className="card min-w-0 overflow-hidden rounded-2xl bg-surface">
           <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-2/60 px-4 py-2.5">
             <span className="truncate font-mono text-xs text-ink-2">scrape-history.csv</span>
             <a
@@ -321,14 +329,14 @@ export default function Landing() {
       </section>
 
       {/* ── Closing CTA ──────────────────────────────────────── */}
-      <section className="mb-14 flex flex-col items-start justify-between gap-6 rounded-xl bg-accent-soft px-6 py-10 ring-1 ring-accent/15 sm:flex-row sm:items-center sm:px-10">
+      <section className="cta-band relative isolate mb-14 flex flex-col items-start justify-between gap-6 overflow-hidden rounded-2xl px-6 py-12 sm:flex-row sm:items-center sm:px-12">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">See what it found today.</h2>
-          <p className="mt-2 text-sm text-ink-2">Search the catalogue, track an option, and watch the history build up.</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">See what it found today.</h2>
+          <p className="mt-2 text-sm text-white/70">Search the catalogue, track an option, and watch the history build up.</p>
         </div>
         <Link
           href="/dashboard"
-          className="group inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink shadow-sm shadow-accent/25 transition-colors hover:bg-accent-strong"
+          className="group inline-flex shrink-0 items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-accent-soft"
         >
           Open the dashboard
           <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -350,8 +358,8 @@ export default function Landing() {
 function SectionHead({ n, title, children }) {
   return (
     <header className="max-w-2xl">
-      <p className="tabular text-sm font-medium text-accent">{n}</p>
-      <h2 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.025em] sm:text-4xl">{title}</h2>
+      <p className="tabular inline-flex h-7 items-center rounded-md bg-accent-soft px-2 text-xs font-semibold text-accent-strong">{n}</p>
+      <h2 className="mt-4 text-3xl font-semibold leading-tight tracking-[-0.025em] sm:text-4xl">{title}</h2>
       {children && <p className="mt-4 text-sm leading-relaxed text-ink-2 sm:text-[0.95rem]">{children}</p>}
     </header>
   );
@@ -359,11 +367,11 @@ function SectionHead({ n, title, children }) {
 
 function Trap({ n, title, specimen, className = '', children }) {
   return (
-    <li className={`flex flex-col rounded-xl bg-surface ring-1 ring-line ${className}`}>
-      <div className="flex min-h-16 items-center border-b border-dashed border-line px-5 py-4">{specimen}</div>
-      <div className="flex-1 p-5">
-        <h3 className="flex items-baseline gap-2.5 text-base font-semibold">
-          <span className="tabular text-sm font-semibold text-accent">{n}</span>
+    <li className={`card flex flex-col overflow-hidden rounded-2xl bg-surface transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/5 ${className}`}>
+      <div className="flex min-h-20 items-center border-b border-line bg-surface-2/60 px-5 py-4">{specimen}</div>
+      <div className="flex-1 p-5 sm:p-6">
+        <h3 className="flex items-start gap-3 text-base font-semibold">
+          <span className="tabular grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-semibold text-accent-ink">{n}</span>
           {title}
         </h3>
         <p className="mt-2 text-[0.93rem] leading-relaxed text-ink-2">{children}</p>
@@ -374,11 +382,11 @@ function Trap({ n, title, specimen, className = '', children }) {
 
 function Rule({ term, children }) {
   return (
-    <div className="rounded-xl bg-surface p-5 ring-1 ring-line">
-      <dt className="flex items-baseline gap-2 text-base font-semibold leading-snug">
-        <span aria-hidden="true" className="text-sm text-critical-ink">✕</span>
-        {term}
-      </dt>
+    <div className="card rounded-2xl bg-surface p-5 sm:p-6">
+      <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-full bg-critical/10 text-sm font-semibold text-critical-ink ring-1 ring-critical/20">
+        ✕
+      </span>
+      <dt className="mt-4 text-base font-semibold leading-snug">{term}</dt>
       <dd className="mt-3 text-[0.93rem] leading-relaxed text-ink-2">{children}</dd>
     </div>
   );
