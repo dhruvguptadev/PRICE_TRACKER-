@@ -18,8 +18,16 @@ The application allows a user to search for a product, select a specific option/
 | Dashboard | https://frontend-liard-rho-77.vercel.app/dashboard |
 | API (Render) | https://price-tracker-api-rqd5.onrender.com/api/health |
 | CSV export | https://price-tracker-api-rqd5.onrender.com/api/export.csv |
+| Demo video (headed run) | https://youtu.be/YWO2jRxq5Kw |
+| Design note | [`docs/decision.md`](./docs/decision.md#design-note): reliability, trade-offs, what the AI tools got wrong |
 
-The API runs on Render's free tier and sleeps when idle, so the first request after a quiet period can take up to a minute.
+The API runs on Render's free tier. A health ping every 10 minutes keeps it awake (see [Scraping Schedule](#scraping-schedule)), so it should answer right away; if the ping was missed, the first request can take about a minute while the instance starts.
+
+## Bonus Features
+
+- **CI/CD with GitHub Actions:** backend tests, frontend lint and build, and a Docker image build on every push and pull request; Vercel and Render deploy from `main` (see [CI/CD](#cicd)).
+- **Page-structure change detection:** class names are read from the store's UI manifest on every run. A structure miss that persists across all retries is logged as `STRUCTURE_CHANGED` instead of a guessed price, and the scrape log shows the error code.
+- **Dashboard across all tracked products:** current price, MRP, stock, last successful check, latest attempt and consecutive failures, with products that failed 3 times in a row highlighted and a banner if the scheduler stops running.
 
 ## Screenshots
 

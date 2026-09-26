@@ -2,7 +2,7 @@
 
 ## Design Note
 
-*The brief asks for a short note on how the scraping was made reliable, what trade-offs were made, and what AI tools got wrong on the first attempt. Keep this section updated with real results before submission.*
+*How the scraping was made reliable, what trade-offs were made, and what the AI tools got wrong on the first attempt.*
 
 ### How the scraping is made reliable
 
